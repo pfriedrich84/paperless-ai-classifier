@@ -1,0 +1,176 @@
+"""Review queue — list, detail, accept, reject, edit suggestions."""
+from __future__ import annotations
+
+import json
+
+import structlog
+from fastapi import APIRouter, Form, Request
+from fastapi.responses import HTMLResponse
+
+from app.db import get_conn
+from app.models import ReviewDecision, SuggestionRow
+from app.pipeline.committer import commit_suggestion
+
+log = structlog.get_logger(__name__)
+router = APIRouter(prefix="/review")
+
+
+def _row_to_suggestion(row) -> SuggestionRow:
+    return SuggestionRow(**dict(row))
+
+
+@router.get("")
+async def review_list(request: Request):
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM suggestions WHERE status = 'pending' ORDER BY created_at DESC"
+        ).fetchall()
+    suggestions = [_row_to_suggestion(r) for r in rows]
+    return request.app.state.templates.TemplateResponse(
+        "review.html",
+        {"request": request, "suggestions": suggestions},
+    )
+
+
+@router.get("/{suggestion_id}")
+async def review_detail(request: Request, suggestion_id: int):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM suggestions WHERE id = ?", (suggestion_id,)
+        ).fetchone()
+    if not row:
+        return HTMLResponse("Suggestion not found", status_code=404)
+
+    suggestion = _row_to_suggestion(row)
+    paperless = request.app.state.paperless
+
+    correspondents = await paperless.list_correspondents()
+    doctypes = await paperless.list_document_types()
+    storage_paths = await paperless.list_storage_paths()
+    tags = await paperless.list_tags()
+
+    # Parse proposed tags JSON
+    proposed_tags = []
+    if suggestion.proposed_tags_json:
+        try:
+            proposed_tags = json.loads(suggestion.proposed_tags_json)
+        except json.JSONDecodeError:
+            pass
+
+    return request.app.state.templates.TemplateResponse(
+        "review_detail.html",
+        {
+            "request": request,
+            "s": suggestion,
+            "correspondents": correspondents,
+            "doctypes": doctypes,
+            "storage_paths": storage_paths,
+            "tags": tags,
+            "proposed_tags": proposed_tags,
+        },
+    )
+
+
+@router.post("/{suggestion_id}/accept")
+async def accept_suggestion(
+    request: Request,
+    suggestion_id: int,
+    title: str = Form(...),
+    date: str = Form(""),
+    correspondent_id: str = Form(""),
+    doctype_id: str = Form(""),
+    storage_path_id: str = Form(""),
+    tag_ids: list[str] = Form(default=[]),
+):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM suggestions WHERE id = ?", (suggestion_id,)
+        ).fetchone()
+    if not row:
+        return HTMLResponse("Suggestion not found", status_code=404)
+
+    suggestion = _row_to_suggestion(row)
+    decision = ReviewDecision(
+        suggestion_id=suggestion_id,
+        title=title,
+        date=date or None,
+        correspondent_id=int(correspondent_id) if correspondent_id else None,
+        doctype_id=int(doctype_id) if doctype_id else None,
+        storage_path_id=int(storage_path_id) if storage_path_id else None,
+        tag_ids=[int(t) for t in tag_ids if t],
+        action="accept",
+    )
+
+    paperless = request.app.state.paperless
+    await commit_suggestion(suggestion, decision, paperless)
+
+    # Return HTMX partial — empty row signals removal
+    return HTMLResponse(
+        f'<tr id="suggestion-{suggestion_id}" class="bg-green-50">'
+        f'<td colspan="4" class="px-4 py-3 text-green-700 text-center">'
+        f"Committed successfully</td></tr>"
+    )
+
+
+@router.post("/{suggestion_id}/reject")
+async def reject_suggestion(request: Request, suggestion_id: int):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE suggestions SET status = 'rejected' WHERE id = ?",
+            (suggestion_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO audit_log (action, document_id, actor, details)
+            SELECT 'reject', document_id, 'user', NULL
+            FROM suggestions WHERE id = ?
+            """,
+            (suggestion_id,),
+        )
+
+    return HTMLResponse(
+        f'<tr id="suggestion-{suggestion_id}" class="bg-red-50">'
+        f'<td colspan="4" class="px-4 py-3 text-red-700 text-center">'
+        f"Rejected</td></tr>"
+    )
+
+
+@router.post("/{suggestion_id}/edit")
+async def edit_suggestion(
+    request: Request,
+    suggestion_id: int,
+    title: str = Form(...),
+    date: str = Form(""),
+    correspondent_id: str = Form(""),
+    doctype_id: str = Form(""),
+    storage_path_id: str = Form(""),
+    tag_ids: list[str] = Form(default=[]),
+):
+    """Save edited fields without committing to Paperless."""
+    tag_dicts = [{"id": int(t)} for t in tag_ids if t]
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE suggestions SET
+                proposed_title = ?,
+                proposed_date = ?,
+                proposed_correspondent_id = ?,
+                proposed_doctype_id = ?,
+                proposed_storage_path_id = ?,
+                proposed_tags_json = ?
+            WHERE id = ?
+            """,
+            (
+                title,
+                date or None,
+                int(correspondent_id) if correspondent_id else None,
+                int(doctype_id) if doctype_id else None,
+                int(storage_path_id) if storage_path_id else None,
+                json.dumps(tag_dicts, ensure_ascii=False),
+                suggestion_id,
+            ),
+        )
+
+    return HTMLResponse(
+        '<div class="text-green-700 text-sm mt-2">Saved</div>'
+    )
