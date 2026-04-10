@@ -1,4 +1,5 @@
 """Core classification logic: build prompt, call LLM, parse result."""
+
 from __future__ import annotations
 
 import json
@@ -91,9 +92,7 @@ async def classify(
 ) -> tuple[ClassificationResult, str]:
     """Call the LLM and return (parsed result, raw JSON string)."""
     system = _load_system_prompt()
-    user = build_user_prompt(
-        target, context_docs, correspondents, doctypes, storage_paths, tags
-    )
+    user = build_user_prompt(target, context_docs, correspondents, doctypes, storage_paths, tags)
 
     log.info(
         "calling ollama",
