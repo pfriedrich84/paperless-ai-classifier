@@ -1,16 +1,17 @@
 """FastAPI application entry point with lifespan, routing, and auth."""
+
 from __future__ import annotations
 
 import logging
 import secrets
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncIterator
 
 import structlog
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.security import HTTPBasic
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -35,6 +36,7 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 # ---------------------------------------------------------------------------
 # Logging setup
 # ---------------------------------------------------------------------------
+
 
 def _configure_logging() -> None:
     """Set up structlog with appropriate renderer."""
@@ -153,8 +155,8 @@ async def healthz():
 # ---------------------------------------------------------------------------
 # Routes (imported after app creation to avoid circular imports)
 # ---------------------------------------------------------------------------
-from app.routes import errors, index, ocr, review, settings as settings_routes  # noqa: E402
-from app.routes import stats, tags, webhook  # noqa: E402
+from app.routes import errors, index, ocr, review, stats, tags, webhook  # noqa: E402
+from app.routes import settings as settings_routes  # noqa: E402
 
 app.include_router(index.router)
 app.include_router(review.router)

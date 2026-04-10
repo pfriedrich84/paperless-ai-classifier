@@ -1,7 +1,6 @@
 """Settings routes — read-only config view and manual triggers."""
-from __future__ import annotations
 
-import asyncio
+from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, Request
@@ -42,14 +41,12 @@ async def trigger_poll(request: Request):
     try:
         await poll_inbox()
         return HTMLResponse(
-            '<div class="text-green-700 text-sm font-medium mt-2">'
-            "Poll completed successfully</div>"
+            '<div class="text-green-700 text-sm font-medium mt-2">Poll completed successfully</div>'
         )
     except Exception as exc:
         log.error("manual poll failed", error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">'
-            f"Poll failed: {exc}</div>",
+            f'<div class="text-red-600 text-sm font-medium mt-2">Poll failed: {exc}</div>',
             status_code=500,
         )
 
@@ -68,7 +65,6 @@ async def trigger_reindex(request: Request):
     except Exception as exc:
         log.error("reindex failed", error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">'
-            f"Reindex failed: {exc}</div>",
+            f'<div class="text-red-600 text-sm font-medium mt-2">Reindex failed: {exc}</div>',
             status_code=500,
         )

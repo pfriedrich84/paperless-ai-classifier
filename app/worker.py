@@ -1,8 +1,9 @@
 """APScheduler-based background worker for inbox polling and classification."""
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -103,7 +104,7 @@ def _store_suggestion(
     corr_id = _resolve_entity(result.correspondent, correspondents)
     dt_id = _resolve_entity(result.document_type, doctypes)
     sp_id = _resolve_entity(result.storage_path, storage_paths)
-    resolved_tag_ids, tag_dicts = _resolve_tags(
+    _resolved_tag_ids, tag_dicts = _resolve_tags(
         [{"name": t.name, "confidence": t.confidence} for t in result.tags],
         existing_tags,
     )
@@ -152,13 +153,13 @@ def _store_suggestion(
                 (document_id, last_updated_at, last_processed, status, suggestion_id)
             VALUES (?, ?, datetime('now'), 'pending', ?)
             """,
-            (doc.id, (doc.modified or datetime.now(tz=timezone.utc)).isoformat(), suggestion_id),
+            (doc.id, (doc.modified or datetime.now(tz=UTC)).isoformat(), suggestion_id),
         )
 
     return SuggestionRow(
         id=suggestion_id,
         document_id=doc.id,
-        created_at=datetime.now(tz=timezone.utc).isoformat(),
+        created_at=datetime.now(tz=UTC).isoformat(),
         status="pending",
         confidence=result.confidence,
         reasoning=result.reasoning,
@@ -197,7 +198,7 @@ async def _process_document(
         ).fetchone()
     if row:
         stored_ts = row["last_updated_at"]
-        doc_ts = (doc.modified or datetime.now(tz=timezone.utc)).isoformat()
+        doc_ts = (doc.modified or datetime.now(tz=UTC)).isoformat()
         if stored_ts == doc_ts:
             log.debug("document already processed", doc_id=doc_id)
             return
@@ -212,7 +213,7 @@ async def _process_document(
                 (document_id, last_updated_at, last_processed, status)
             VALUES (?, ?, datetime('now'), 'pending')
             """,
-            (doc_id, (doc.modified or datetime.now(tz=timezone.utc)).isoformat()),
+            (doc_id, (doc.modified or datetime.now(tz=UTC)).isoformat()),
         )
 
     # Optional OCR correction (modifies content in-memory only)
@@ -225,26 +226,30 @@ async def _process_document(
 
     # Classify
     result, raw_response = await classifier.classify(
-        doc, context_docs, correspondents, doctypes, storage_paths, tags, ollama,
+        doc,
+        context_docs,
+        correspondents,
+        doctypes,
+        storage_paths,
+        tags,
+        ollama,
     )
 
     # Store suggestion
     suggestion = _store_suggestion(
-        doc, result, raw_response,
-        correspondents, doctypes, storage_paths, tags,
+        doc,
+        result,
+        raw_response,
+        correspondents,
+        doctypes,
+        storage_paths,
+        tags,
     )
 
     # Auto-commit if confidence is high enough
-    if (
-        settings.auto_commit_confidence > 0
-        and result.confidence >= settings.auto_commit_confidence
-    ):
+    if settings.auto_commit_confidence > 0 and result.confidence >= settings.auto_commit_confidence:
         log.info("auto-committing", doc_id=doc_id, confidence=result.confidence)
-        tag_ids = [
-            tid
-            for t in result.tags
-            if (tid := _resolve_entity(t.name, tags)) is not None
-        ]
+        tag_ids = [tid for t in result.tags if (tid := _resolve_entity(t.name, tags)) is not None]
         decision = ReviewDecision(
             suggestion_id=suggestion.id,
             title=result.title,
@@ -296,8 +301,13 @@ async def poll_inbox() -> None:
     for doc in docs:
         try:
             await _process_document(
-                doc, _paperless, _ollama,
-                correspondents, doctypes, storage_paths, tags,
+                doc,
+                _paperless,
+                _ollama,
+                correspondents,
+                doctypes,
+                storage_paths,
+                tags,
             )
         except Exception as exc:
             log.error("pipeline failed for document", doc_id=doc.id, error=str(exc))
@@ -328,7 +338,7 @@ def _write_error(stage: str, doc_id: int | None, exc: Exception) -> None:
 # ---------------------------------------------------------------------------
 def start_scheduler(app: object) -> None:
     """Initialise and start the APScheduler."""
-    global _paperless, _ollama  # noqa: PLW0603
+    global _paperless, _ollama
 
     _paperless = getattr(app, "state", app).paperless  # type: ignore[union-attr]
     _ollama = getattr(app, "state", app).ollama  # type: ignore[union-attr]

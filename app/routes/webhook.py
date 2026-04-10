@@ -1,13 +1,11 @@
 """Optional webhook endpoint for Paperless post-consume hooks."""
+
 from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from app.db import get_conn
-from app.pipeline import classifier, context_builder
-from app.pipeline.ocr_correction import maybe_correct_ocr
 from app.worker import _process_document
 
 log = structlog.get_logger(__name__)
@@ -35,8 +33,13 @@ async def paperless_webhook(request: Request, payload: WebhookPayload):
         tags = await paperless.list_tags()
 
         await _process_document(
-            doc, paperless, ollama,
-            correspondents, doctypes, storage_paths, tags,
+            doc,
+            paperless,
+            ollama,
+            correspondents,
+            doctypes,
+            storage_paths,
+            tags,
         )
         return {"status": "ok", "document_id": doc_id}
     except Exception as exc:

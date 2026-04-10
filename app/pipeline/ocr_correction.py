@@ -1,4 +1,5 @@
 """Optional OCR error correction pass via LLM."""
+
 from __future__ import annotations
 
 import re
@@ -30,16 +31,15 @@ def _text_looks_broken(text: str) -> bool:
     # Many single-character "words" suggest broken tokenisation
     words = text.split()
     if words:
-        single_char = sum(1 for w in words if len(w) == 1 and w not in {"–", "-", "—", "&"})
+        single_char = sum(
+            1 for w in words if len(w) == 1 and w not in {"\u2013", "-", "\u2014", "&"}
+        )
         if single_char / len(words) > 0.15:
             return True
 
     # High ratio of non-standard characters
     non_normal = len(_NORMAL_RE.sub("", text))
-    if non_normal / total > 0.03:
-        return True
-
-    return False
+    return non_normal / total > 0.03
 
 
 async def maybe_correct_ocr(

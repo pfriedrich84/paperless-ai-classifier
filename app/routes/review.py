@@ -1,6 +1,8 @@
 """Review queue — list, detail, accept, reject, edit suggestions."""
+
 from __future__ import annotations
 
+import contextlib
 import json
 
 import structlog
@@ -35,9 +37,7 @@ async def review_list(request: Request):
 @router.get("/{suggestion_id}")
 async def review_detail(request: Request, suggestion_id: int):
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM suggestions WHERE id = ?", (suggestion_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM suggestions WHERE id = ?", (suggestion_id,)).fetchone()
     if not row:
         return HTMLResponse("Suggestion not found", status_code=404)
 
@@ -52,10 +52,8 @@ async def review_detail(request: Request, suggestion_id: int):
     # Parse proposed tags JSON
     proposed_tags = []
     if suggestion.proposed_tags_json:
-        try:
+        with contextlib.suppress(json.JSONDecodeError):
             proposed_tags = json.loads(suggestion.proposed_tags_json)
-        except json.JSONDecodeError:
-            pass
 
     return request.app.state.templates.TemplateResponse(
         "review_detail.html",
@@ -80,12 +78,10 @@ async def accept_suggestion(
     correspondent_id: str = Form(""),
     doctype_id: str = Form(""),
     storage_path_id: str = Form(""),
-    tag_ids: list[str] = Form(default=[]),
+    tag_ids: list[str] = Form(default=[]),  # noqa: B008
 ):
     with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM suggestions WHERE id = ?", (suggestion_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM suggestions WHERE id = ?", (suggestion_id,)).fetchone()
     if not row:
         return HTMLResponse("Suggestion not found", status_code=404)
 
@@ -144,7 +140,7 @@ async def edit_suggestion(
     correspondent_id: str = Form(""),
     doctype_id: str = Form(""),
     storage_path_id: str = Form(""),
-    tag_ids: list[str] = Form(default=[]),
+    tag_ids: list[str] = Form(default=[]),  # noqa: B008
 ):
     """Save edited fields without committing to Paperless."""
     tag_dicts = [{"id": int(t)} for t in tag_ids if t]
@@ -171,6 +167,4 @@ async def edit_suggestion(
             ),
         )
 
-    return HTMLResponse(
-        '<div class="text-green-700 text-sm mt-2">Saved</div>'
-    )
+    return HTMLResponse('<div class="text-green-700 text-sm mt-2">Saved</div>')
