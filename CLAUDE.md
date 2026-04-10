@@ -27,15 +27,17 @@ KI-basierter Klassifikator fuer Paperless-NGX. Pollt die Inbox (Tag `Posteingang
 
 ```
 app/
-  main.py              FastAPI-App, Lifespan startet Worker + DB-Init
+  main.py              FastAPI-App, Lifespan startet Worker + Telegram + DB-Init
   config.py            pydantic-settings, alles aus .env
   db.py                SQLite-Setup, Schema-Migration, sqlite-vec laden
   models.py            Pydantic-Modelle (Suggestion, TagProposal, etc.)
   worker.py            APScheduler-Job: poll_inbox() periodisch
   indexer.py           Initialer + inkrementeller Reindex der Embeddings
+  telegram_handler.py  Telegram-Benachrichtigungen + Inline-Keyboard-Callbacks
   clients/
     paperless.py       Paperless-NGX API Client
     ollama.py          Ollama Chat + Embedding Client
+    telegram.py        Telegram Bot API Client (httpx, Long-Polling)
   pipeline/
     ocr_correction.py  Optional: OCR-Fehler via LLM korrigieren
     context_builder.py Aehnliche Dokumente via Embedding-Similarity finden
@@ -107,6 +109,14 @@ cp .env.example .env
 # Werte eintragen
 uvicorn app.main:app --reload --port 8088
 ```
+
+## Telegram-Bot (optional)
+
+Wenn `ENABLE_TELEGRAM=true` und `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` gesetzt:
+- Neue Vorschlaege werden als Telegram-Nachricht mit Inline-Keyboard gesendet (Accept / Reject / Edit in GUI)
+- Accept/Reject direkt im Chat moeglich, ohne GUI
+- Benachrichtigungen werden nur fuer manuell zu reviewende Vorschlaege gesendet (nicht fuer auto-committed)
+- Long-Polling (kein Webhook noetig, laeuft hinter NAT/Firewall)
 
 ## Bekannte TODOs / Ausbau
 
