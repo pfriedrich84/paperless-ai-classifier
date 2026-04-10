@@ -1,4 +1,5 @@
 """Pydantic models for internal data structures and LLM I/O."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -29,6 +30,7 @@ class PaperlessDocument(BaseModel):
 
 class PaperlessEntity(BaseModel):
     """Generic for tags, correspondents, document_types, storage_paths."""
+
     id: int
     name: str
     slug: str | None = None

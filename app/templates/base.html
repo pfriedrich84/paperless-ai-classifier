@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Paperless AI Classifier{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+    <link rel="stylesheet" href="/static/app.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe',
+                            300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1',
+                            600: '#4f46e5', 700: '#4338ca', 800: '#3730a3',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full" hx-boost="true">
+
+<!-- Navigation -->
+<nav class="bg-primary-700 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+            <div class="flex items-center space-x-8">
+                <a href="/" class="text-white font-bold text-lg tracking-tight">
+                    Paperless AI
+                </a>
+                <div class="hidden md:flex space-x-1">
+                    {% set nav_items = [
+                        ("/", "Dashboard"),
+                        ("/review", "Review"),
+                        ("/tags", "Tags"),
+                        ("/errors", "Errors"),
+                        ("/stats", "Stats"),
+                        ("/settings", "Settings"),
+                    ] %}
+                    {% for href, label in nav_items %}
+                    <a href="{{ href }}"
+                       class="px-3 py-2 rounded-md text-sm font-medium
+                              {% if request.url.path == href or (href != '/' and request.url.path.startswith(href)) %}
+                              bg-primary-800 text-white
+                              {% else %}
+                              text-primary-100 hover:bg-primary-600 hover:text-white
+                              {% endif %}
+                              transition-colors">
+                        {{ label }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile nav -->
+    <div class="md:hidden border-t border-primary-600 px-2 py-2 space-y-1">
+        {% for href, label in nav_items %}
+        <a href="{{ href }}"
+           class="block px-3 py-2 rounded-md text-sm font-medium
+                  {% if request.url.path == href or (href != '/' and request.url.path.startswith(href)) %}
+                  bg-primary-800 text-white
+                  {% else %}
+                  text-primary-100 hover:bg-primary-600
+                  {% endif %}">
+            {{ label }}
+        </a>
+        {% endfor %}
+    </div>
+</nav>
+
+<!-- Main content -->
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    {% block content %}{% endblock %}
+</main>
+
+<!-- Footer -->
+<footer class="border-t border-gray-200 mt-12">
+    <div class="max-w-7xl mx-auto px-4 py-4 text-center text-sm text-gray-400">
+        Paperless AI Classifier v0.1.0
+    </div>
+</footer>
+
+</body>
+</html>

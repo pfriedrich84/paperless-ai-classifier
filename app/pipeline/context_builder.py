@@ -1,4 +1,5 @@
 """Build LLM context from similar existing documents via sqlite-vec."""
+
 from __future__ import annotations
 
 import struct
@@ -29,9 +30,7 @@ def _document_summary(doc: PaperlessDocument) -> str:
     return "\n".join(p for p in parts if p)
 
 
-async def index_document(
-    doc: PaperlessDocument, ollama: OllamaClient
-) -> None:
+async def index_document(doc: PaperlessDocument, ollama: OllamaClient) -> None:
     """Compute + persist an embedding for a single document."""
     text = _document_summary(doc)
     if not text.strip():

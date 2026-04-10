@@ -1,0 +1,51 @@
+/* paperless-ai-classifier — custom styles (supplements Tailwind CDN) */
+
+/* HTMX indicator: hidden by default, shown during requests */
+.htmx-indicator {
+    display: none;
+}
+.htmx-request .htmx-indicator {
+    display: inline-flex;
+}
+
+/* Smooth row transitions for HTMX swaps */
+tr {
+    transition: background-color 0.3s ease;
+}
+
+/* Fade-in for swapped content */
+.htmx-settling tr,
+.htmx-settling div {
+    opacity: 1;
+}
+.htmx-swapping tr,
+.htmx-swapping div {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+}
+
+/* Scrollbar styling for tag checkbox lists */
+.overflow-y-auto::-webkit-scrollbar {
+    width: 6px;
+}
+.overflow-y-auto::-webkit-scrollbar-track {
+    background: transparent;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* Print: hide nav and footer */
+@media print {
+    nav, footer, button, .htmx-indicator {
+        display: none !important;
+    }
+    main {
+        max-width: 100% !important;
+        padding: 0 !important;
+    }
+}

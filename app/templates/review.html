@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Review Queue — Paperless AI{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Review Queue</h1>
+    <p class="mt-1 text-sm text-gray-500">{{ suggestions|length }} pending suggestion{{ 's' if suggestions|length != 1 else '' }}</p>
+</div>
+
+{% if suggestions %}
+<div class="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Document</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Proposed Title</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Confidence</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for s in suggestions %}
+            <tr id="suggestion-{{ s.id }}" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3">
+                    <div class="text-sm font-medium text-gray-900">#{{ s.document_id }}</div>
+                    <div class="text-xs text-gray-400">{{ s.created_at[:16] }}</div>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="text-sm text-gray-800">{{ s.proposed_title or '—' }}</div>
+                    {% if s.proposed_correspondent_name %}
+                    <div class="text-xs text-gray-400">{{ s.proposed_correspondent_name }}</div>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3 text-center">
+                    {% set conf = s.confidence or 0 %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                 {{ 'bg-green-100 text-green-800' if conf >= 80 else ('bg-amber-100 text-amber-800' if conf >= 50 else 'bg-red-100 text-red-800') }}">
+                        {{ conf }}%
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-right space-x-2">
+                    <a href="/review/{{ s.id }}"
+                       class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg
+                              bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors">
+                        Review
+                    </a>
+                    <button hx-post="/review/{{ s.id }}/reject"
+                            hx-target="#suggestion-{{ s.id }}"
+                            hx-swap="outerHTML"
+                            hx-confirm="Reject this suggestion?"
+                            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg
+                                   bg-red-50 text-red-700 hover:bg-red-100 transition-colors">
+                        Reject
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-16">
+    <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <h3 class="mt-4 text-lg font-medium text-gray-900">All caught up!</h3>
+    <p class="mt-1 text-sm text-gray-500">No pending suggestions to review.</p>
+</div>
+{% endif %}
+{% endblock %}

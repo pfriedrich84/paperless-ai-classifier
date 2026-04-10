@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Tag Whitelist — Paperless AI{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Tag Whitelist</h1>
+    <p class="mt-1 text-sm text-gray-500">Manage new tags proposed by the classifier</p>
+</div>
+
+{% if tags %}
+<div class="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tag Name</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Paperless ID</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Times Seen</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for t in tags %}
+            <tr id="tag-{{ t.name }}" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 font-medium text-sm text-gray-900">{{ t.name }}</td>
+                <td class="px-4 py-3 text-center text-sm text-gray-500">{{ t.paperless_id or '—' }}</td>
+                <td class="px-4 py-3 text-center">
+                    {% if t.approved %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        Approved
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                        Pending
+                    </span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3 text-center text-sm text-gray-500">{{ t.times_seen }}</td>
+                <td class="px-4 py-3 text-right space-x-2">
+                    {% if not t.approved %}
+                    <button hx-post="/tags/{{ t.name }}/approve"
+                            hx-target="#tag-{{ t.name }}"
+                            hx-swap="outerHTML"
+                            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg
+                                   bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
+                        Approve
+                    </button>
+                    <button hx-post="/tags/{{ t.name }}/reject"
+                            hx-target="#tag-{{ t.name }}"
+                            hx-swap="outerHTML"
+                            hx-confirm="Remove tag '{{ t.name }}' from whitelist?"
+                            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg
+                                   bg-red-50 text-red-700 hover:bg-red-100 transition-colors">
+                        Reject
+                    </button>
+                    {% else %}
+                    <span class="text-xs text-gray-400">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-16">
+    <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/>
+    </svg>
+    <h3 class="mt-4 text-lg font-medium text-gray-900">No tag proposals</h3>
+    <p class="mt-1 text-sm text-gray-500">New tags will appear here when the classifier suggests them.</p>
+</div>
+{% endif %}
+{% endblock %}

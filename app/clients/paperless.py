@@ -1,6 +1,8 @@
 """Paperless-NGX REST API client."""
+
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 import httpx
@@ -84,10 +86,8 @@ class PaperlessClient:
             r.raise_for_status()
             data = r.json()
             for item in data.get("results", []):
-                try:
+                with contextlib.suppress(Exception):
                     docs.append(PaperlessDocument.model_validate(item))
-                except Exception:
-                    pass
             if limit and len(docs) >= limit:
                 return docs[:limit]
             next_url = data.get("next")
@@ -122,10 +122,8 @@ class PaperlessClient:
             r.raise_for_status()
             data = r.json()
             for item in data.get("results", []):
-                try:
+                with contextlib.suppress(Exception):
                     out.append(PaperlessEntity.model_validate(item))
-                except Exception:
-                    pass
             next_url = data.get("next")
             url = self._relative(next_url) if next_url else None
         return out
@@ -139,4 +137,4 @@ class PaperlessClient:
         idx = absolute_url.find(marker)
         if idx == -1:
             return absolute_url
-        return absolute_url[idx + len(marker):]
+        return absolute_url[idx + len(marker) :]

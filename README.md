@@ -14,6 +14,7 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
 - 📝 Optionaler OCR-Correction-Pass (nur wenn OCR erkennbar kaputt ist)
 - 🗄️ SQLite-State mit vollständigem Audit-Trail
 - 🔁 Idempotent: verarbeitet jedes Dokument nur einmal
+- 🤖 Telegram-Bot: Vorschläge direkt im Chat annehmen/ablehnen (optional)
 - 🐳 Single-Container, Dockhand-ready, GitHub Actions für Image-Build
 
 ## Architektur
@@ -89,6 +90,9 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 | `CONTEXT_MAX_DOCS` | `5` | Wieviele ähnliche Dokumente in den Prompt |
 | `AUTO_COMMIT_CONFIDENCE` | `0` | Wenn > 0: ab diesem Score automatisch committen (0–100) |
 | `GUI_PORT` | `8088` | Port der Review-GUI |
+| `ENABLE_TELEGRAM` | `false` | Telegram-Bot aktivieren |
+| `TELEGRAM_BOT_TOKEN` | — | Bot-Token von @BotFather |
+| `TELEGRAM_CHAT_ID` | — | Chat-ID für Benachrichtigungen |
 
 ## Review-Workflow
 

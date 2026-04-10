@@ -1,0 +1,175 @@
+"""FastAPI application entry point with lifespan, routing, and auth."""
+
+from __future__ import annotations
+
+import logging
+import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import structlog
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBasic
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
+
+from app.clients.ollama import OllamaClient
+from app.clients.paperless import PaperlessClient
+from app.clients.telegram import TelegramClient
+from app.config import settings
+from app.db import init_db
+from app.telegram_handler import start_telegram, stop_telegram
+from app.worker import start_scheduler, stop_scheduler
+
+log = structlog.get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Directories
+# ---------------------------------------------------------------------------
+_BASE_DIR = Path(__file__).parent
+_TEMPLATES_DIR = _BASE_DIR / "templates"
+_STATIC_DIR = _BASE_DIR / "static"
+
+templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
+# ---------------------------------------------------------------------------
+# Logging setup
+# ---------------------------------------------------------------------------
+
+
+def _configure_logging() -> None:
+    """Set up structlog with appropriate renderer."""
+    log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.StackInfoRenderer(),
+            structlog.dev.set_exc_info,
+            structlog.processors.TimeStamper(fmt="iso"),
+            (
+                structlog.dev.ConsoleRenderer()
+                if settings.log_level.upper() == "DEBUG"
+                else structlog.processors.JSONRenderer()
+            ),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Optional Basic Auth
+# ---------------------------------------------------------------------------
+security = HTTPBasic(auto_error=False)
+
+
+class BasicAuthMiddleware(BaseHTTPMiddleware):
+    """Simple HTTP Basic Auth protecting all routes except /healthz and /webhook."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path in ("/healthz",) or path.startswith("/webhook") or path.startswith("/static"):
+            return await call_next(request)
+
+        auth = request.headers.get("Authorization")
+        if auth and auth.startswith("Basic "):
+            import base64
+
+            try:
+                decoded = base64.b64decode(auth[6:]).decode("utf-8")
+                username, password = decoded.split(":", 1)
+                correct_user = secrets.compare_digest(username, settings.gui_username)
+                correct_pass = secrets.compare_digest(password, settings.gui_password)
+                if correct_user and correct_pass:
+                    return await call_next(request)
+            except Exception:
+                pass
+
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Unauthorized"},
+            headers={"WWW-Authenticate": 'Basic realm="paperless-ai-classifier"'},
+        )
+
+
+# ---------------------------------------------------------------------------
+# Lifespan
+# ---------------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    _configure_logging()
+    log.info("starting paperless-ai-classifier")
+
+    init_db()
+
+    paperless = PaperlessClient()
+    ollama = OllamaClient()
+    telegram = TelegramClient()
+    app.state.paperless = paperless
+    app.state.ollama = ollama
+    app.state.telegram = telegram
+    app.state.templates = templates
+
+    # Healthchecks — warning only, don't fail startup
+    if not await paperless.ping():
+        log.warning("paperless not reachable at startup")
+    if not await ollama.ping():
+        log.warning("ollama not reachable at startup")
+
+    start_scheduler(app)
+    start_telegram(telegram, paperless)
+    yield
+    stop_telegram()
+    stop_scheduler(app)
+    await telegram.aclose()
+    await paperless.aclose()
+    await ollama.aclose()
+    log.info("shutdown complete")
+
+
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
+app = FastAPI(
+    title="Paperless AI Classifier",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+# Optional auth middleware
+if settings.gui_username and settings.gui_password:
+    app.add_middleware(BasicAuthMiddleware)
+
+# Static files
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
+# ---------------------------------------------------------------------------
+# Health endpoint
+# ---------------------------------------------------------------------------
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Routes (imported after app creation to avoid circular imports)
+# ---------------------------------------------------------------------------
+from app.routes import errors, index, ocr, review, stats, tags, webhook  # noqa: E402
+from app.routes import settings as settings_routes  # noqa: E402
+
+app.include_router(index.router)
+app.include_router(review.router)
+app.include_router(tags.router)
+app.include_router(ocr.router)
+app.include_router(errors.router)
+app.include_router(stats.router)
+app.include_router(settings_routes.router)
+app.include_router(webhook.router)

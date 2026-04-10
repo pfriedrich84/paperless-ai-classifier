@@ -1,4 +1,5 @@
 """Ollama client: chat (with JSON mode) and embeddings."""
+
 from __future__ import annotations
 
 import json

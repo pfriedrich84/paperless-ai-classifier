@@ -1,4 +1,5 @@
 """Application configuration via pydantic-settings (.env-driven)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -38,6 +39,12 @@ class Settings(BaseSettings):
     gui_port: int = 8088
     gui_username: str = ""
     gui_password: str = ""
+
+    # --- Telegram ---
+    enable_telegram: bool = False
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_poll_interval: int = 5  # seconds between getUpdates calls
 
     # --- State ---
     data_dir: str = "/data"
