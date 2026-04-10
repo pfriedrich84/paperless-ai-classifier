@@ -1,0 +1,29 @@
+services:
+  paperless-ai-classifier:
+    build: .
+    image: ghcr.io/pfriedrich84/paperless-ai-classifier:latest
+    container_name: paperless-ai-classifier
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${GUI_PORT:-8088}:8088"
+    volumes:
+      - paperless_ai_data:/data
+    # Falls Paperless/Ollama in anderen Compose-Stacks laufen,
+    # entsprechendes externes Netzwerk einkommentieren:
+    # networks:
+    #   - paperless
+    #   - ollama
+
+volumes:
+  paperless_ai_data:
+    driver: local
+
+# networks:
+#   paperless:
+#     external: true
+#     name: ix-paperless-ngx_default
+#   ollama:
+#     external: true
+#     name: ollama_default
