@@ -1,0 +1,27 @@
+# Docker Compose override for running the MCP server alongside or instead of
+# the main FastAPI application.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.mcp.yml up
+#
+# Or standalone:
+#   docker compose -f docker-compose.mcp.yml up
+
+services:
+  paperless-ai-classifier-mcp:
+    build: .
+    container_name: paperless-ai-classifier-mcp
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=3001
+    ports:
+      - "${MCP_PORT:-3001}:3001"
+    volumes:
+      - paperless_ai_data:/data
+    command: ["python", "-m", "app.mcp_server"]
+
+volumes:
+  paperless_ai_data:

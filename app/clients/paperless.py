@@ -75,6 +75,35 @@ class PaperlessClient:
         r.raise_for_status()
         log.info("document patched", id=document_id, fields=list(fields.keys()))
 
+    async def search_documents(
+        self,
+        query: str | None = None,
+        tags: list[str] | None = None,
+        correspondent: str | None = None,
+        document_type: str | None = None,
+        page_size: int = 25,
+    ) -> list[PaperlessDocument]:
+        """Full-text search with optional filters."""
+        params = [f"page_size={page_size}"]
+        if query:
+            params.append(f"query={query}")
+        if correspondent:
+            params.append(f"correspondent__name__icontains={correspondent}")
+        if document_type:
+            params.append(f"document_type__name__icontains={document_type}")
+        for tag in tags or []:
+            params.append(f"tags__name__icontains={tag}")
+        url = f"/documents/?{'&'.join(params)}"
+        r = await self._client.get(url)
+        r.raise_for_status()
+        data = r.json()
+        docs: list[PaperlessDocument] = []
+        for item in data.get("results", []):
+            with contextlib.suppress(Exception):
+                docs.append(PaperlessDocument.model_validate(item))
+        log.info("search_documents", count=len(docs), query=query)
+        return docs
+
     async def list_all_documents(
         self, page_size: int = 100, limit: int | None = None
     ) -> list[PaperlessDocument]:

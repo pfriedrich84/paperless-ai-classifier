@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     # --- Webhook ---
     webhook_secret: str = ""  # if set, POST /webhook/paperless requires this token
 
+    # --- MCP ---
+    mcp_transport: str = "stdio"  # stdio | sse | streamable-http
+    mcp_port: int = 3001
+    mcp_host: str = "0.0.0.0"
+    mcp_enable_write: bool = False  # write tools only registered when True
+    mcp_api_key: str = ""  # empty = no auth (ok for stdio)
+    mcp_classify_rate_limit: int = 10  # max classifications per hour, 0 = unlimited
+
     # --- State ---
     data_dir: str = "/data"
     log_level: str = "INFO"

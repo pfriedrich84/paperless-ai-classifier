@@ -43,6 +43,17 @@ app/
     context_builder.py Aehnliche Dokumente via Embedding-Similarity finden
     classifier.py      Prompt bauen, Ollama aufrufen, JSON parsen
     committer.py       Angenommene Vorschlaege nach Paperless schreiben
+  mcp_server.py        MCP Server Entrypoint (FastMCP, Lifespan)
+  mcp_tools/
+    _deps.py           Deps-Dataclass (PaperlessClient + OllamaClient)
+    _auth.py           API-Key-Pruefung + Rate-Limiter
+    documents.py       Dokument-Tools (search, get, list_inbox, update)
+    entities.py        Entity-Tools (correspondents, doctypes, tags, storage_paths)
+    classify.py        KI-Tools (classify_document, find_similar)
+    suggestions.py     Suggestion-Tools (list, get, approve, reject)
+    tags.py            Tag-Whitelist-Tools (list_proposals, approve)
+    system.py          Status/Health-Tool
+    resources.py       MCP Resources (inbox, pending suggestions)
   routes/
     index.py           Dashboard / Startseite
     review.py          Review-Queue + Detail + Annehmen/Ablehnen
@@ -117,6 +128,39 @@ Wenn `ENABLE_TELEGRAM=true` und `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` gesetz
 - Accept/Reject direkt im Chat moeglich, ohne GUI
 - Benachrichtigungen werden nur fuer manuell zu reviewende Vorschlaege gesendet (nicht fuer auto-committed)
 - Long-Polling (kein Webhook noetig, laeuft hinter NAT/Firewall)
+
+## MCP Server (optional)
+
+Model Context Protocol Server fuer KI-Assistenten (Claude Code, etc.).
+
+```bash
+# stdio (fuer Claude Code / lokale Nutzung)
+python -m app.mcp_server
+
+# SSE (fuer HTTP-Clients)
+MCP_TRANSPORT=sse MCP_PORT=3001 python -m app.mcp_server
+```
+
+**Sicherheitskonzept:**
+- Read-Only als Default. Write-Tools nur bei `MCP_ENABLE_WRITE=true`.
+- `MCP_API_KEY` fuer Auth (empfohlen bei SSE-Transport).
+- `MCP_CLASSIFY_RATE_LIMIT=10` begrenzt KI-Klassifikationen pro Stunde.
+- `classify_document` akzeptiert nur Dokumente mit Inbox-Tag.
+
+**Tools (read-only, immer verfuegbar):**
+- `search_documents`, `get_document`, `list_inbox`
+- `list_correspondents`, `list_document_types`, `list_tags`, `list_storage_paths`
+- `list_suggestions`, `get_suggestion`
+- `list_tag_proposals`
+- `classify_document` (rate-limited), `find_similar_documents`
+- `get_status`
+
+**Tools (write, opt-in via MCP_ENABLE_WRITE=true):**
+- `update_document`, `approve_suggestion`, `reject_suggestion`, `approve_tag`
+
+**Resources:**
+- `paperless://inbox` — Inbox-Zusammenfassung
+- `paperless://suggestions/pending` — Offene Vorschlaege
 
 ## Bekannte TODOs / Ausbau
 
