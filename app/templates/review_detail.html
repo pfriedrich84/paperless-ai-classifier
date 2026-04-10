@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Review #{{ s.document_id }} — Paperless AI{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <div class="flex items-center space-x-3">
+        <a href="/review" class="text-primary-600 hover:text-primary-800">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </a>
+        <h1 class="text-2xl font-bold text-gray-900">Review Document #{{ s.document_id }}</h1>
+        {% set conf = s.confidence or 0 %}
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
+                     {{ 'bg-green-100 text-green-800' if conf >= 80 else ('bg-amber-100 text-amber-800' if conf >= 50 else 'bg-red-100 text-red-800') }}">
+            {{ conf }}% confidence
+        </span>
+    </div>
+    {% if s.reasoning %}
+    <p class="mt-2 text-sm text-gray-600 italic">"{{ s.reasoning }}"</p>
+    {% endif %}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+    <!-- Original (read-only) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Original</h2>
+        <dl class="space-y-3">
+            <div>
+                <dt class="text-xs font-medium text-gray-400 uppercase">Title</dt>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_title or '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-gray-400 uppercase">Date</dt>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_date or '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-gray-400 uppercase">Correspondent</dt>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_correspondent or '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-gray-400 uppercase">Document Type</dt>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_doctype or '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-gray-400 uppercase">Storage Path</dt>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_storage_path or '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-gray-400 uppercase">Tags</dt>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_tags_json or '—' }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Proposed (editable form) -->
+    <div class="bg-white rounded-xl shadow-sm border border-primary-200 p-6">
+        <h2 class="text-lg font-semibold text-primary-700 mb-4">Proposed</h2>
+
+        <form id="review-form" hx-boost="false">
+            <div class="space-y-4">
+
+                <!-- Title -->
+                <div>
+                    <label for="title" class="block text-xs font-medium text-gray-500 uppercase">Title</label>
+                    <input type="text" name="title" id="title"
+                           value="{{ s.proposed_title or '' }}"
+                           class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm
+                                  focus:border-primary-500 focus:ring-primary-500 text-sm
+                                  px-3 py-2 border">
+                </div>
+
+                <!-- Date -->
+                <div>
+                    <label for="date" class="block text-xs font-medium text-gray-500 uppercase">Date</label>
+                    <input type="date" name="date" id="date"
+                           value="{{ s.proposed_date or '' }}"
+                           class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm
+                                  focus:border-primary-500 focus:ring-primary-500 text-sm
+                                  px-3 py-2 border">
+                </div>
+
+                <!-- Correspondent -->
+                <div>
+                    <label for="correspondent_id" class="block text-xs font-medium text-gray-500 uppercase">Correspondent</label>
+                    <select name="correspondent_id" id="correspondent_id"
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm
+                                   focus:border-primary-500 focus:ring-primary-500 text-sm
+                                   px-3 py-2 border">
+                        <option value="">— None —</option>
+                        {% for c in correspondents %}
+                        <option value="{{ c.id }}" {{ 'selected' if c.id == s.proposed_correspondent_id }}>{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if s.proposed_correspondent_name and not s.proposed_correspondent_id %}
+                    <p class="mt-1 text-xs text-amber-600">Suggested new: "{{ s.proposed_correspondent_name }}"</p>
+                    {% endif %}
+                </div>
+
+                <!-- Document Type -->
+                <div>
+                    <label for="doctype_id" class="block text-xs font-medium text-gray-500 uppercase">Document Type</label>
+                    <select name="doctype_id" id="doctype_id"
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm
+                                   focus:border-primary-500 focus:ring-primary-500 text-sm
+                                   px-3 py-2 border">
+                        <option value="">— None —</option>
+                        {% for d in doctypes %}
+                        <option value="{{ d.id }}" {{ 'selected' if d.id == s.proposed_doctype_id }}>{{ d.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if s.proposed_doctype_name and not s.proposed_doctype_id %}
+                    <p class="mt-1 text-xs text-amber-600">Suggested new: "{{ s.proposed_doctype_name }}"</p>
+                    {% endif %}
+                </div>
+
+                <!-- Storage Path -->
+                <div>
+                    <label for="storage_path_id" class="block text-xs font-medium text-gray-500 uppercase">Storage Path</label>
+                    <select name="storage_path_id" id="storage_path_id"
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm
+                                   focus:border-primary-500 focus:ring-primary-500 text-sm
+                                   px-3 py-2 border">
+                        <option value="">— None —</option>
+                        {% for sp in storage_paths %}
+                        <option value="{{ sp.id }}" {{ 'selected' if sp.id == s.proposed_storage_path_id }}>{{ sp.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Tags -->
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 uppercase">Tags</label>
+                    <div class="mt-2 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                        {% for t in tags %}
+                        {% set is_proposed = t.id in (proposed_tags | map(attribute='id') | select('defined') | list) %}
+                        <label class="flex items-center space-x-2 text-sm">
+                            <input type="checkbox" name="tag_ids" value="{{ t.id }}"
+                                   {{ 'checked' if is_proposed }}
+                                   class="rounded border-gray-300 text-primary-600
+                                          focus:ring-primary-500">
+                            <span>{{ t.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% for pt in proposed_tags if pt.get('id') is none %}
+                    <p class="mt-1 text-xs text-amber-600">New tag suggested: "{{ pt.name }}" ({{ pt.confidence }}%)</p>
+                    {% endfor %}
+                </div>
+
+            </div>
+
+            <!-- Action buttons -->
+            <div class="mt-6 flex items-center space-x-3">
+                <button type="submit"
+                        hx-post="/review/{{ s.id }}/accept"
+                        hx-include="#review-form"
+                        hx-target="#result-area"
+                        hx-swap="innerHTML"
+                        class="flex-1 inline-flex justify-center items-center px-4 py-2.5
+                               bg-green-600 text-white text-sm font-medium rounded-lg
+                               hover:bg-green-700 focus:outline-none focus:ring-2
+                               focus:ring-green-500 focus:ring-offset-2 transition-colors">
+                    Accept &amp; Commit
+                </button>
+                <button type="button"
+                        hx-post="/review/{{ s.id }}/edit"
+                        hx-include="#review-form"
+                        hx-target="#result-area"
+                        hx-swap="innerHTML"
+                        class="flex-1 inline-flex justify-center items-center px-4 py-2.5
+                               bg-primary-600 text-white text-sm font-medium rounded-lg
+                               hover:bg-primary-700 focus:outline-none focus:ring-2
+                               focus:ring-primary-500 focus:ring-offset-2 transition-colors">
+                    Save Changes
+                </button>
+                <button type="button"
+                        hx-post="/review/{{ s.id }}/reject"
+                        hx-target="#result-area"
+                        hx-swap="innerHTML"
+                        hx-confirm="Reject this suggestion?"
+                        class="inline-flex justify-center items-center px-4 py-2.5
+                               bg-red-600 text-white text-sm font-medium rounded-lg
+                               hover:bg-red-700 focus:outline-none focus:ring-2
+                               focus:ring-red-500 focus:ring-offset-2 transition-colors">
+                    Reject
+                </button>
+            </div>
+        </form>
+
+        <div id="result-area" class="mt-4"></div>
+    </div>
+
+</div>
+{% endblock %}

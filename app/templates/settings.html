@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Settings — Paperless AI{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
+    <p class="mt-1 text-sm text-gray-500">Current configuration (read-only) and manual triggers</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+    <!-- Config table -->
+    <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+            <h2 class="text-lg font-semibold text-gray-700">Configuration</h2>
+        </div>
+        <table class="min-w-full divide-y divide-gray-100">
+            <tbody>
+                {% for key, value in config_items %}
+                <tr class="hover:bg-gray-50 transition-colors {{ 'bg-gray-50' if loop.index is odd }}">
+                    <td class="px-6 py-2.5 text-sm font-mono text-gray-600 whitespace-nowrap">{{ key }}</td>
+                    <td class="px-6 py-2.5 text-sm text-gray-900 font-mono break-all">{{ value }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Manual triggers -->
+    <div class="space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 class="text-lg font-semibold text-gray-700 mb-4">Manual Triggers</h2>
+
+            <div class="space-y-4">
+                <div>
+                    <p class="text-sm text-gray-600 mb-2">Run the inbox poll immediately.</p>
+                    <button hx-post="/settings/trigger-poll"
+                            hx-target="#poll-result"
+                            hx-swap="innerHTML"
+                            hx-indicator="#poll-spinner"
+                            class="w-full inline-flex justify-center items-center px-4 py-2.5
+                                   bg-primary-600 text-white text-sm font-medium rounded-lg
+                                   hover:bg-primary-700 transition-colors">
+                        <svg id="poll-spinner" class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Trigger Poll
+                    </button>
+                    <div id="poll-result"></div>
+                </div>
+
+                <hr class="border-gray-100">
+
+                <div>
+                    <p class="text-sm text-gray-600 mb-2">Rebuild the embedding index from scratch.</p>
+                    <button hx-post="/settings/trigger-reindex"
+                            hx-target="#reindex-result"
+                            hx-swap="innerHTML"
+                            hx-confirm="This will drop and rebuild all embeddings. Continue?"
+                            hx-indicator="#reindex-spinner"
+                            class="w-full inline-flex justify-center items-center px-4 py-2.5
+                                   bg-amber-600 text-white text-sm font-medium rounded-lg
+                                   hover:bg-amber-700 transition-colors">
+                        <svg id="reindex-spinner" class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Trigger Reindex
+                    </button>
+                    <div id="reindex-result"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
