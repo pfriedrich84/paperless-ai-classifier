@@ -43,9 +43,7 @@ def register(mcp: FastMCP) -> None:
             }
             for r in rows
         ]
-        return json.dumps(
-            {"count": len(items), "suggestions": items}, ensure_ascii=False
-        )
+        return json.dumps({"count": len(items), "suggestions": items}, ensure_ascii=False)
 
     @mcp.resource(
         uri="paperless://stats",
@@ -70,10 +68,12 @@ def register(mcp: FastMCP) -> None:
                 "SELECT COUNT(*) FROM tag_whitelist WHERE approved = 0"
             ).fetchone()[0]
 
-        return json.dumps({
-            "suggestions_pending": pending,
-            "suggestions_committed": committed,
-            "suggestions_rejected": rejected,
-            "errors_last_24h": errors,
-            "tags_pending_approval": pending_tags,
-        })
+        return json.dumps(
+            {
+                "suggestions_pending": pending,
+                "suggestions_committed": committed,
+                "suggestions_rejected": rejected,
+                "errors_last_24h": errors,
+                "tags_pending_approval": pending_tags,
+            }
+        )

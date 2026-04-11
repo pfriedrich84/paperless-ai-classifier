@@ -90,6 +90,7 @@ def register(mcp: FastMCP) -> None:
     # Write tools — only registered when MCP_ENABLE_WRITE=true
     # ------------------------------------------------------------------
     if settings.mcp_enable_write:
+
         @mcp.tool(
             name="update_document",
             description=(
@@ -138,4 +139,6 @@ def register(mcp: FastMCP) -> None:
                 )
 
             log.info("document updated via MCP", doc_id=document_id, fields=list(fields.keys()))
-            return json.dumps({"ok": True, "document_id": document_id, "updated_fields": list(fields.keys())})
+            return json.dumps(
+                {"ok": True, "document_id": document_id, "updated_fields": list(fields.keys())}
+            )

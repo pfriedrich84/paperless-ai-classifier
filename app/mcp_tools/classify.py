@@ -38,13 +38,15 @@ def register(mcp: FastMCP) -> None:
 
         # Inbox gate: only classify documents with the inbox tag
         if settings.paperless_inbox_tag_id not in doc.tags:
-            return json.dumps({
-                "error": (
-                    f"Document {document_id} does not carry the inbox tag "
-                    f"(tag ID {settings.paperless_inbox_tag_id}). "
-                    "Only inbox documents can be classified via MCP."
-                )
-            })
+            return json.dumps(
+                {
+                    "error": (
+                        f"Document {document_id} does not carry the inbox tag "
+                        f"(tag ID {settings.paperless_inbox_tag_id}). "
+                        "Only inbox documents can be classified via MCP."
+                    )
+                }
+            )
 
         # Lazy imports to avoid circular dependencies at module load
         from app.pipeline import classifier, context_builder
@@ -116,9 +118,7 @@ def register(mcp: FastMCP) -> None:
         ),
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
     )
-    async def find_similar_documents(
-        document_id: int, limit: int = 5, ctx: Context = None
-    ) -> str:
+    async def find_similar_documents(document_id: int, limit: int = 5, ctx: Context = None) -> str:
         check_api_key(ctx)
         deps = get_deps(ctx)
 
@@ -132,14 +132,16 @@ def register(mcp: FastMCP) -> None:
         results = []
         for d in similar:
             content_preview = (d.content or "")[:500]
-            results.append({
-                "id": d.id,
-                "title": d.title,
-                "created_date": d.created_date,
-                "correspondent": d.correspondent,
-                "document_type": d.document_type,
-                "tags": d.tags,
-                "content_preview": content_preview,
-            })
+            results.append(
+                {
+                    "id": d.id,
+                    "title": d.title,
+                    "created_date": d.created_date,
+                    "correspondent": d.correspondent,
+                    "document_type": d.document_type,
+                    "tags": d.tags,
+                    "content_preview": content_preview,
+                }
+            )
 
         return json.dumps(results, ensure_ascii=False, default=str)

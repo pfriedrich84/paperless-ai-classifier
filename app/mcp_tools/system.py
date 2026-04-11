@@ -40,9 +40,7 @@ def register(mcp: FastMCP) -> None:
             errors = conn.execute(
                 "SELECT COUNT(*) FROM errors WHERE occurred_at > datetime('now', '-24 hours')"
             ).fetchone()[0]
-            embedded = conn.execute(
-                "SELECT COUNT(*) FROM doc_embedding_meta"
-            ).fetchone()[0]
+            embedded = conn.execute("SELECT COUNT(*) FROM doc_embedding_meta").fetchone()[0]
             pending_tags = conn.execute(
                 "SELECT COUNT(*) FROM tag_whitelist WHERE approved = 0"
             ).fetchone()[0]

@@ -76,8 +76,7 @@ def register(mcp: FastMCP) -> None:
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    f"SELECT {_SUGGESTION_COLS} FROM suggestions "
-                    "ORDER BY created_at DESC LIMIT 50"
+                    f"SELECT {_SUGGESTION_COLS} FROM suggestions ORDER BY created_at DESC LIMIT 50"
                 ).fetchall()
         return json.dumps([_row_to_dict(r) for r in rows], ensure_ascii=False, default=str)
 
@@ -101,6 +100,7 @@ def register(mcp: FastMCP) -> None:
     # Write tools — only registered when MCP_ENABLE_WRITE=true
     # ------------------------------------------------------------------
     if settings.mcp_enable_write:
+
         @mcp.tool(
             name="approve_suggestion",
             description=(
@@ -126,7 +126,9 @@ def register(mcp: FastMCP) -> None:
             if not row:
                 return json.dumps({"error": f"Suggestion {suggestion_id} not found."})
             if row["status"] != "pending":
-                return json.dumps({"error": f"Suggestion is already '{row['status']}', not pending."})
+                return json.dumps(
+                    {"error": f"Suggestion is already '{row['status']}', not pending."}
+                )
 
             suggestion = SuggestionRow(**dict(row))
 
@@ -179,7 +181,9 @@ def register(mcp: FastMCP) -> None:
                 if not row:
                     return json.dumps({"error": f"Suggestion {suggestion_id} not found."})
                 if row["status"] != "pending":
-                    return json.dumps({"error": f"Suggestion is already '{row['status']}', not pending."})
+                    return json.dumps(
+                        {"error": f"Suggestion is already '{row['status']}', not pending."}
+                    )
 
                 conn.execute(
                     "UPDATE suggestions SET status = 'rejected' WHERE id = ?",

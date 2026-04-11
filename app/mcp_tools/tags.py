@@ -54,6 +54,7 @@ def register(mcp: FastMCP) -> None:
     # Write tools — only registered when MCP_ENABLE_WRITE=true
     # ------------------------------------------------------------------
     if settings.mcp_enable_write:
+
         @mcp.tool(
             name="approve_tag",
             description=(
@@ -78,9 +79,11 @@ def register(mcp: FastMCP) -> None:
             if not row:
                 return json.dumps({"error": f"Tag '{name}' not found in proposals."})
             if row["approved"]:
-                return json.dumps({
-                    "error": f"Tag '{name}' is already approved (Paperless ID: {row['paperless_id']})."
-                })
+                return json.dumps(
+                    {
+                        "error": f"Tag '{name}' is already approved (Paperless ID: {row['paperless_id']})."
+                    }
+                )
 
             # Create in Paperless
             entity = await deps.paperless.create_tag(name)
