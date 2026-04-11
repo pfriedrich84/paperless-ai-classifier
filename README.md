@@ -15,6 +15,7 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
 - 🗄️ SQLite-State mit vollständigem Audit-Trail
 - 🔁 Idempotent: verarbeitet jedes Dokument nur einmal
 - 🤖 Telegram-Bot: Vorschläge direkt im Chat annehmen/ablehnen (optional)
+- 🔌 MCP Server: Paperless-NGX + KI-Klassifikation als Tools für Claude Code und andere KI-Assistenten (optional)
 - 🐳 Single-Container, Dockhand-ready, GitHub Actions für Image-Build
 
 ## Architektur
@@ -93,6 +94,9 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 | `ENABLE_TELEGRAM` | `false` | Telegram-Bot aktivieren |
 | `TELEGRAM_BOT_TOKEN` | — | Bot-Token von @BotFather |
 | `TELEGRAM_CHAT_ID` | — | Chat-ID für Benachrichtigungen |
+| `MCP_TRANSPORT` | `stdio` | MCP-Transport: `stdio`, `sse`, `streamable-http` |
+| `MCP_ENABLE_WRITE` | `false` | MCP-Write-Tools aktivieren |
+| `MCP_API_KEY` | — | MCP-Auth (empfohlen bei SSE) |
 
 ## Review-Workflow
 
@@ -103,6 +107,72 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 5. Eintrag landet in `suggestions` mit Status `pending`.
 6. In der GUI: durchklicken, editieren, freigeben. Tags, die noch nicht in der Whitelist sind, werden dabei **staged** und müssen separat unter `/tags` freigegeben werden, bevor sie in Paperless angelegt werden.
 7. Nach Commit: Felder werden via PATCH gegen Paperless geschrieben, `Posteingang` entfernt, optional `Processed` gesetzt.
+
+## MCP Server (optional)
+
+[Model Context Protocol](https://modelcontextprotocol.io/) Server, der Paperless-NGX und die KI-Klassifikation als Tools für KI-Assistenten (Claude Code, etc.) bereitstellt.
+
+```bash
+# stdio (für Claude Code / lokale Nutzung)
+python -m app.mcp_server
+
+# SSE (für HTTP-Clients)
+MCP_TRANSPORT=sse MCP_PORT=3001 python -m app.mcp_server
+
+# Docker
+docker compose -f docker-compose.yml -f docker-compose.mcp.yml up
+```
+
+### Sicherheitskonzept
+
+- **Read-Only als Default.** Schreibende Tools (`update_document`, `approve_suggestion`, `reject_suggestion`, `approve_tag`) nur bei `MCP_ENABLE_WRITE=true`.
+- **API-Key-Auth:** `MCP_API_KEY` sichert alle Tool-Calls ab (empfohlen bei SSE-Transport).
+- **Rate-Limit:** `MCP_CLASSIFY_RATE_LIMIT=10` begrenzt KI-Klassifikationen auf 10 pro Stunde.
+- **Inbox-Gate:** `classify_document` akzeptiert nur Dokumente mit dem Inbox-Tag.
+
+### Verfügbare Tools
+
+| Kategorie | Tools | Modus |
+|---|---|---|
+| Dokumente | `search_documents`, `get_document`, `list_inbox` | read-only |
+| Dokumente | `update_document` | write (opt-in) |
+| Entities | `list_correspondents`, `list_document_types`, `list_tags`, `list_storage_paths` | read-only |
+| KI | `classify_document` (rate-limited), `find_similar_documents` | read-only |
+| Suggestions | `list_suggestions`, `get_suggestion` | read-only |
+| Suggestions | `approve_suggestion`, `reject_suggestion` | write (opt-in) |
+| Tags | `list_tag_proposals` | read-only |
+| Tags | `approve_tag` | write (opt-in) |
+| System | `get_status` | read-only |
+
+### MCP-Konfiguration
+
+| Variable | Default | Beschreibung |
+|---|---|---|
+| `MCP_TRANSPORT` | `stdio` | Transport: `stdio`, `sse`, `streamable-http` |
+| `MCP_PORT` | `3001` | Port für SSE/HTTP-Transport |
+| `MCP_HOST` | `0.0.0.0` | Bind-Adresse |
+| `MCP_ENABLE_WRITE` | `false` | Write-Tools aktivieren |
+| `MCP_API_KEY` | — | API-Key für Authentifizierung |
+| `MCP_CLASSIFY_RATE_LIMIT` | `10` | Max. Klassifikationen pro Stunde (0 = unbegrenzt) |
+
+### Claude Code Integration
+
+```json
+{
+  "mcpServers": {
+    "paperless": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "/path/to/paperless-ai-classifier",
+      "env": {
+        "PAPERLESS_URL": "http://localhost:8000",
+        "PAPERLESS_TOKEN": "your-token",
+        "PAPERLESS_INBOX_TAG_ID": "1"
+      }
+    }
+  }
+}
+```
 
 ## Deployment via Dockhand
 
