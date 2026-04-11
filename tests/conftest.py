@@ -89,6 +89,55 @@ def sample_entities() -> list[PaperlessEntity]:
 
 
 @pytest.fixture()
+def sample_correspondents() -> list[PaperlessEntity]:
+    return [
+        PaperlessEntity(id=1, name="Max Mustermann"),
+        PaperlessEntity(id=2, name="Stadtwerke München"),
+        PaperlessEntity(id=3, name="Deutsche Post"),
+    ]
+
+
+@pytest.fixture()
+def sample_doctypes() -> list[PaperlessEntity]:
+    return [
+        PaperlessEntity(id=10, name="Rechnung"),
+        PaperlessEntity(id=11, name="Vertrag"),
+    ]
+
+
+@pytest.fixture()
+def sample_storage_paths() -> list[PaperlessEntity]:
+    return [
+        PaperlessEntity(id=30, name="Finanzen/Rechnungen"),
+        PaperlessEntity(id=31, name="Vertraege"),
+    ]
+
+
+@pytest.fixture()
+def sample_tags() -> list[PaperlessEntity]:
+    return [
+        PaperlessEntity(id=20, name="Finanzen"),
+        PaperlessEntity(id=21, name="Wohnung"),
+        PaperlessEntity(id=22, name="Strom"),
+    ]
+
+
+@pytest.fixture()
+def sample_context_doc() -> PaperlessDocument:
+    """A classified document suitable as context (not in inbox)."""
+    return PaperlessDocument(
+        id=5,
+        title="Stromrechnung Q1 2024",
+        content="Rechnung Nr. 2024-1234\nStadtwerke München GmbH\nStrom\n127,43 EUR\n15.03.2024",
+        created_date="2024-03-15",
+        correspondent=2,  # Stadtwerke München
+        document_type=10,  # Rechnung
+        storage_path=30,  # Finanzen/Rechnungen
+        tags=[20, 22],  # Finanzen, Strom
+    )
+
+
+@pytest.fixture()
 def sample_doc() -> PaperlessDocument:
     """A minimal test document."""
     return PaperlessDocument(

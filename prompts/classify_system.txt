@@ -11,6 +11,7 @@ Deine Aufgabe ist es, fuer ein gegebenes Dokument fuenf Metadaten-Felder und pas
 6. **Tags:** Bevorzuge Tags aus der bereitgestellten Liste. Neue Tags nur vorschlagen, wenn wirklich keine vorhandenen passen. Pro Tag einen Konfidenz-Score (0–100) angeben.
 7. **Konfidenz (`confidence`):** Ehrliche Einschaetzung deiner Gesamtsicherheit von 0 bis 100. Unter 50 bedeutet: du bist dir unsicher. Ueber 80 bedeutet: du bist sehr sicher.
 8. **Begruendung (`reasoning`):** Kurze Erklaerung in 1–3 Saetzen, warum du diese Klassifikation gewaehlt hast.
+9. **Kontext-Dokumente:** Wenn aehnliche, bereits klassifizierte Dokumente als Kontext bereitgestellt werden, beachte deren Metadaten (Korrespondent, Dokumenttyp, Speicherpfad, Tags) als starke Hinweise. Wenn das zu klassifizierende Dokument offensichtlich vom selben Absender oder gleichen Typ ist, uebernimm die entsprechenden Werte. Bei Widerspruechen zwischen Kontext-Dokumenten orientiere dich an der Mehrheit und am Inhalt des Zieldokuments. Die endgueltige Entscheidung basiert immer auf dem tatsaechlichen Dokumentinhalt.
 
 # Ausgabeformat
 

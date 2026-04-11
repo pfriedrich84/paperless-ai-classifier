@@ -32,6 +32,51 @@ def _format_document_block(doc: PaperlessDocument, max_chars: int) -> str:
     )
 
 
+def _resolve_entity_name(entity_id: int | None, entities: list[PaperlessEntity]) -> str | None:
+    """Resolve a Paperless entity ID to its display name (inverse of name→ID)."""
+    if entity_id is None:
+        return None
+    for e in entities:
+        if e.id == entity_id:
+            return e.name
+    return None
+
+
+def _format_context_block(
+    doc: PaperlessDocument,
+    max_chars: int,
+    correspondents: list[PaperlessEntity],
+    doctypes: list[PaperlessEntity],
+    storage_paths: list[PaperlessEntity],
+    tags: list[PaperlessEntity],
+) -> str:
+    """Format a context document including its classification metadata."""
+    lines = [f"--- Dokument #{doc.id} ---", f"Titel: {doc.title}"]
+
+    if doc.created_date:
+        lines.append(f"Datum: {doc.created_date}")
+
+    corr = _resolve_entity_name(doc.correspondent, correspondents)
+    if corr:
+        lines.append(f"Korrespondent: {corr}")
+
+    dt = _resolve_entity_name(doc.document_type, doctypes)
+    if dt:
+        lines.append(f"Dokumenttyp: {dt}")
+
+    sp = _resolve_entity_name(doc.storage_path, storage_paths)
+    if sp:
+        lines.append(f"Speicherpfad: {sp}")
+
+    if doc.tags:
+        tag_names = [name for tid in doc.tags if (name := _resolve_entity_name(tid, tags))]
+        if tag_names:
+            lines.append(f"Tags: {', '.join(tag_names)}")
+
+    lines.append(f"Inhalt:\n{_truncate(doc.content or '', max_chars)}")
+    return "\n".join(lines) + "\n"
+
+
 def _format_entity_list(label: str, entities: list[PaperlessEntity]) -> str:
     if not entities:
         return f"{label}: (keine)"
@@ -58,9 +103,15 @@ def build_user_prompt(
     sections.append(_format_entity_list("Tags", tags))
 
     if context_docs:
-        sections.append("\n# Kontext: aehnliche bereits klassifizierte Dokumente")
+        sections.append(
+            f"\n# Kontext: {len(context_docs)} aehnliche bereits klassifizierte Dokumente"
+        )
         for c in context_docs:
-            sections.append(_format_document_block(c, max_chars // 2))
+            sections.append(
+                _format_context_block(
+                    c, max_chars // 2, correspondents, doctypes, storage_paths, tags
+                )
+            )
 
     sections.append("\n# Zu klassifizierendes Dokument")
     sections.append(_format_document_block(target, max_chars))

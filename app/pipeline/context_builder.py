@@ -63,7 +63,12 @@ async def find_similar_documents(
     ollama: OllamaClient,
     limit: int | None = None,
 ) -> list[PaperlessDocument]:
-    """Return up to `limit` already-classified documents most similar to `doc`."""
+    """Return up to `limit` already-classified documents most similar to `doc`.
+
+    Documents still in the inbox (carrying the inbox tag) are excluded — they
+    have not been reviewed/approved yet and would provide unreliable context.
+    We overfetch from the DB to compensate for filtered-out inbox docs.
+    """
     limit = limit or settings.context_max_docs
     text = _document_summary(doc)
     if not text.strip():
@@ -76,7 +81,9 @@ async def find_similar_documents(
         return []
 
     blob = _serialize_embedding(vec)
+    inbox_tag_id = settings.paperless_inbox_tag_id
 
+    # Overfetch 2x to compensate for inbox docs that will be filtered out
     with get_conn() as conn:
         rows = conn.execute(
             """
@@ -87,7 +94,7 @@ async def find_similar_documents(
              ORDER BY distance
              LIMIT ?
             """,
-            (blob, doc.id, limit),
+            (blob, doc.id, limit * 2),
         ).fetchall()
 
     if not rows:
@@ -95,8 +102,14 @@ async def find_similar_documents(
 
     similar: list[PaperlessDocument] = []
     for row in rows:
+        if len(similar) >= limit:
+            break
         try:
             d = await paperless.get_document(row["document_id"])
+            # Skip docs still in inbox — not yet reviewed/approved
+            if inbox_tag_id in d.tags:
+                log.debug("skipping inbox doc as context", doc_id=d.id)
+                continue
             similar.append(d)
         except Exception as exc:
             log.warning("failed to load similar doc", id=row["document_id"], error=str(exc))
