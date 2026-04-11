@@ -40,7 +40,8 @@ async def commit_suggestion(
         # -- 2. Merge tags ------------------------------------------------
         doc = await paperless.get_document(doc_id)
         tag_set = set(doc.tags)
-        tag_set.discard(settings.paperless_inbox_tag_id)
+        if not settings.keep_inbox_tag:
+            tag_set.discard(settings.paperless_inbox_tag_id)
         tag_set.update(decision.tag_ids)
         if settings.paperless_processed_tag_id:
             tag_set.add(settings.paperless_processed_tag_id)

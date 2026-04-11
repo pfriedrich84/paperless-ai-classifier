@@ -84,6 +84,7 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 | `PAPERLESS_TOKEN` | — | API-Token (Paperless → Admin → Tokens) |
 | `PAPERLESS_INBOX_TAG_ID` | — | ID des Tags `Posteingang` |
 | `PAPERLESS_PROCESSED_TAG_ID` | — | Optional: Tag, der nach Commit gesetzt wird |
+| `KEEP_INBOX_TAG` | `true` | Posteingang-Tag nach Commit beibehalten |
 | `OLLAMA_URL` | `http://ollama:11434` | Ollama-Endpoint |
 | `OLLAMA_MODEL` | `gemma3:4b` | Klassifikations-Modell |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding-Modell für Kontext |
@@ -106,7 +107,7 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 4. Ollama bekommt System-Prompt, Kontext und den neuen Dokumenttext, liefert strukturiertes JSON.
 5. Eintrag landet in `suggestions` mit Status `pending`.
 6. In der GUI: durchklicken, editieren, freigeben. Tags, die noch nicht in der Whitelist sind, werden dabei **staged** und müssen separat unter `/tags` freigegeben werden, bevor sie in Paperless angelegt werden.
-7. Nach Commit: Felder werden via PATCH gegen Paperless geschrieben, `Posteingang` entfernt, optional `Processed` gesetzt.
+7. Nach Commit: Felder werden via PATCH gegen Paperless geschrieben, optional `Processed` gesetzt. Der `Posteingang`-Tag bleibt standardmaessig erhalten (`KEEP_INBOX_TAG=true`); mit `KEEP_INBOX_TAG=false` wird er entfernt.
 
 ## MCP Server (optional)
 
