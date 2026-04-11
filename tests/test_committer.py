@@ -86,6 +86,25 @@ async def test_commit_adds_processed_tag(mock_paperless, patch_db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_commit_keeps_inbox_tag_when_enabled(mock_paperless, patch_db, monkeypatch):
+    """When KEEP_INBOX_TAG=true (default), the inbox tag stays on the document."""
+    monkeypatch.setattr("app.pipeline.committer.settings.paperless_inbox_tag_id", 99)
+    monkeypatch.setattr("app.pipeline.committer.settings.paperless_processed_tag_id", None)
+    monkeypatch.setattr("app.pipeline.committer.settings.keep_inbox_tag", True)
+
+    mock_paperless.get_document.return_value = PaperlessDocument(id=42, title="old", tags=[99, 5])
+
+    suggestion = _make_suggestion()
+    decision = _make_decision()
+
+    await commit_suggestion(suggestion, decision, mock_paperless)
+
+    fields = mock_paperless.patch_document.call_args[0][1]
+    # Tags: inbox (99) kept, existing (5) kept, new (20, 21) added
+    assert set(fields["tags"]) == {5, 20, 21, 99}
+
+
+@pytest.mark.asyncio
 async def test_commit_skips_none_fields(mock_paperless, patch_db, monkeypatch):
     """None values for optional fields should not be sent."""
     monkeypatch.setattr("app.pipeline.committer.settings.paperless_inbox_tag_id", 99)
