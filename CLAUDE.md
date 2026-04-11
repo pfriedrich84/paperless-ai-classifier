@@ -159,8 +159,8 @@ MCP_TRANSPORT=sse MCP_PORT=3001 python -m app.mcp_server
 - `update_document`, `approve_suggestion`, `reject_suggestion`, `approve_tag`
 
 **Resources:**
-- `paperless://inbox` — Inbox-Zusammenfassung
 - `paperless://suggestions/pending` — Offene Vorschlaege
+- `paperless://stats` — Classifier-Statistiken (Suggestions, Errors, Tags)
 
 ## Bekannte TODOs / Ausbau
 
