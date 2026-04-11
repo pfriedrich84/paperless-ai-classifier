@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # --- Ollama ---
     ollama_url: str = "http://ollama:11434"
     ollama_model: str = "gemma3:4b"
-    ollama_embed_model: str = "nomic-embed-text"
+    ollama_embed_model: str = "nomic-embed-text-v2-moe"
     ollama_timeout_seconds: int = 300
 
     # --- Worker ---

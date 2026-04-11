@@ -115,7 +115,7 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 | `KEEP_INBOX_TAG` | `true` | Posteingang-Tag nach Commit beibehalten |
 | `OLLAMA_URL` | `http://ollama:11434` | Ollama-Endpoint |
 | `OLLAMA_MODEL` | `gemma3:4b` | Klassifikations-Modell |
-| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding-Modell für Kontext |
+| `OLLAMA_EMBED_MODEL` | `nomic-embed-text-v2-moe` | Embedding-Modell für Kontext (multilingual) |
 | `POLL_INTERVAL_SECONDS` | `300` | Wie oft die Inbox gepollt wird |
 | `CONTEXT_MAX_DOCS` | `5` | Wieviele ähnliche Dokumente in den Prompt |
 | `AUTO_COMMIT_CONFIDENCE` | `0` | Wenn > 0: ab diesem Score automatisch committen (0–100) |
