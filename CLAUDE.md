@@ -68,6 +68,7 @@ app/
 prompts/
   classify_system.txt  System-Prompt fuer Klassifikation (Deutsch)
   ocr_correction_system.txt  System-Prompt fuer OCR-Correction
+entrypoint.sh            Startet Uvicorn + optional MCP-Server (ENABLE_MCP=true)
 ```
 
 ## Paperless-API-Reference (nur was wir brauchen)

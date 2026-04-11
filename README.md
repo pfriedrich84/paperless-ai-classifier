@@ -16,7 +16,7 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
 - 🔁 Idempotent: verarbeitet jedes Dokument nur einmal
 - 🤖 Telegram-Bot: Vorschläge direkt im Chat annehmen/ablehnen (optional)
 - 🔌 MCP Server: Paperless-NGX + KI-Klassifikation als Tools für Claude Code und andere KI-Assistenten (optional)
-- 🐳 Single-Container, Dockhand-ready, GitHub Actions für Image-Build
+- 🐳 Single-Container, Dockhand-ready, fertiges Image via [GitHub Container Registry](https://ghcr.io/pfriedrich84/paperless-ai-classifier)
 
 ## Architektur
 
@@ -53,6 +53,32 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
 
 ## Quickstart
 
+### Option A: Fertiges Image von GHCR (empfohlen)
+
+```bash
+# 1. docker-compose.yml und .env herunterladen
+curl -LO https://raw.githubusercontent.com/pfriedrich84/paperless-ai-classifier/main/docker-compose.yml
+curl -LO https://raw.githubusercontent.com/pfriedrich84/paperless-ai-classifier/main/.env.example
+cp .env.example .env
+# → Werte eintragen (Paperless-URL, Token, Ollama-URL, Inbox-Tag-ID)
+
+# 2. Ollama-Modell ziehen (auf dem Ollama-Host)
+ollama pull gemma3:4b
+
+# 3. Starten (zieht automatisch ghcr.io/pfriedrich84/paperless-ai-classifier:latest)
+docker compose up -d
+
+# 4. GUI öffnen
+open http://localhost:8088
+```
+
+> **Verfügbare Tags:**
+> - `latest` — aktueller Stand von `main`
+> - `v0.1.0`, `v0.1` — versionierte Releases (bei getaggten Releases)
+> - `sha-<hash>` — spezifischer Commit
+
+### Option B: Selbst bauen
+
 ```bash
 # 1. Repo klonen
 git clone git@github.com:pfriedrich84/paperless-ai-classifier.git
@@ -65,7 +91,7 @@ cp .env.example .env
 # 3. Ollama-Modell ziehen (auf dem Ollama-Host)
 ollama pull gemma3:4b
 
-# 4. Starten
+# 4. Bauen und starten
 docker compose up -d --build
 
 # 5. GUI öffnen
@@ -114,14 +140,17 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 [Model Context Protocol](https://modelcontextprotocol.io/) Server, der Paperless-NGX und die KI-Klassifikation als Tools für KI-Assistenten (Claude Code, etc.) bereitstellt.
 
 ```bash
-# stdio (für Claude Code / lokale Nutzung)
+# Docker: MCP läuft im selben Container mit
+# In .env setzen:
+#   ENABLE_MCP=true
+#   MCP_API_KEY=ein-sicherer-key
+docker compose up -d
+
+# Lokal (stdio, für Claude Code CLI):
 python -m app.mcp_server
 
-# SSE (für HTTP-Clients)
+# Lokal (SSE):
 MCP_TRANSPORT=sse MCP_PORT=3001 python -m app.mcp_server
-
-# Docker
-docker compose -f docker-compose.yml -f docker-compose.mcp.yml up
 ```
 
 ### Sicherheitskonzept

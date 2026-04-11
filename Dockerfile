@@ -33,15 +33,16 @@ RUN pip install --upgrade pip \
 # App
 COPY app ./app
 COPY prompts ./prompts
+COPY entrypoint.sh ./
 
 # Persistent state
 RUN mkdir -p /data
 VOLUME ["/data"]
 
-EXPOSE 8088
+EXPOSE 8088 3001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS http://localhost:8088/healthz || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8088"]
+CMD ["./entrypoint.sh"]
