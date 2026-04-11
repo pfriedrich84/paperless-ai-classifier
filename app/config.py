@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     paperless_token: str
     paperless_inbox_tag_id: int
     paperless_processed_tag_id: int | None = None
-    keep_inbox_tag: bool = False
+    keep_inbox_tag: bool = True
 
     # --- Ollama ---
     ollama_url: str = "http://ollama:11434"

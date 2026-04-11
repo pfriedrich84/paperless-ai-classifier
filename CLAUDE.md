@@ -4,7 +4,7 @@ Kontext fuer Claude / Claude Code, wenn an diesem Repo gearbeitet wird.
 
 ## Projekt-Zweck
 
-KI-basierter Klassifikator fuer Paperless-NGX. Pollt die Inbox (Tag `Posteingang`), laesst ein lokales Ollama-Modell fuenf Felder vorschlagen (Titel, Datum, Korrespondent, Dokumenttyp, Speicherpfad), zeigt die Vorschlaege in einer Review-GUI, und schreibt sie nach manueller Freigabe via PATCH zurueck in Paperless.
+KI-basierter Klassifikator fuer Paperless-NGX. Pollt die Inbox (Tag `Posteingang`), laesst ein lokales Ollama-Modell fuenf Felder vorschlagen (Titel, Datum, Korrespondent, Dokumenttyp, Speicherpfad), zeigt die Vorschlaege in einer Review-GUI, und schreibt sie nach manueller Freigabe via PATCH zurueck in Paperless. Der `Posteingang`-Tag bleibt nach Commit standardmaessig erhalten (`KEEP_INBOX_TAG=true`).
 
 ## Nicht-Ziele
 
@@ -84,6 +84,7 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 2. **Tag-Whitelist-Gate:** `tags`-Updates in Paperless passieren NUR mit IDs, die in der Whitelist stehen. Neue vom LLM vorgeschlagene Tags landen in `tag_proposals` mit Status `pending`.
 3. **Confidence-Gate:** Nur wenn `AUTO_COMMIT_CONFIDENCE > 0` UND das LLM einen Score darueber meldet wird ohne Review committed.
 4. **Read-Only bei Fehler:** Wenn Paperless oder Ollama nicht erreichbar sind, wird ein Error-Record geschrieben und der Worker macht weiter. Keine Retries im selben Lauf.
+5. **Inbox-Tag bleibt:** Standardmaessig (`KEEP_INBOX_TAG=true`) wird der `Posteingang`-Tag nach Commit NICHT entfernt. Nur mit `KEEP_INBOX_TAG=false` wird er beim Commit entfernt.
 
 ## Deployment (Dockhand)
 
