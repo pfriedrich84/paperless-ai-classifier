@@ -99,9 +99,7 @@ async def save_config_route(request: Request):
         parts.append(f"Actions: {', '.join(actions)}")
 
     msg = ". ".join(parts) + "." if parts else "Saved."
-    return HTMLResponse(
-        f'<div class="text-green-700 text-sm font-medium mt-2">Saved. {msg}</div>'
-    )
+    return HTMLResponse(f'<div class="text-green-700 text-sm font-medium mt-2">Saved. {msg}</div>')
 
 
 @router.post("/trigger-poll")

@@ -135,9 +135,7 @@ class SetupRedirectMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         if needs_setup() and not (
-            path.startswith("/setup")
-            or path.startswith("/static")
-            or path in ("/healthz",)
+            path.startswith("/setup") or path.startswith("/static") or path in ("/healthz",)
         ):
             from starlette.responses import RedirectResponse
 
