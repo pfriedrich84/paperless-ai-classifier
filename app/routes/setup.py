@@ -17,12 +17,35 @@ router = APIRouter(prefix="/setup")
 # ---------------------------------------------------------------------------
 # Wizard page (GET)
 # ---------------------------------------------------------------------------
+def _prefill_from_settings() -> dict[str, str]:
+    """Seed wizard values from current settings (loaded from env / config.env)."""
+    prefill: dict[str, str] = {}
+    fields = {
+        "paperless_url": str,
+        "paperless_token": str,
+        "paperless_inbox_tag_id": str,
+        "ollama_url": str,
+        "ollama_model": str,
+        "enable_telegram": str,
+        "telegram_bot_token": str,
+        "telegram_chat_id": str,
+    }
+    for key, conv in fields.items():
+        val = getattr(settings, key, None)
+        if val is not None:
+            s = conv(val)
+            # Skip obvious placeholder defaults
+            if s and s != "0":
+                prefill[key] = s
+    return prefill
+
+
 @router.get("")
 async def setup_page(request: Request):
     return request.app.state.templates.TemplateResponse(
         request,
         "setup.html",
-        {"step": 1, "values": {}, "needs_setup": needs_setup()},
+        {"step": 1, "values": _prefill_from_settings(), "needs_setup": needs_setup()},
     )
 
 

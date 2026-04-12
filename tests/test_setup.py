@@ -52,6 +52,17 @@ class TestSetupWizard:
         assert "Setup Wizard" in r.text
         assert "Paperless-NGX Connection" in r.text
 
+    def test_setup_prefills_from_env(self, client, monkeypatch):
+        """When env vars are set, the wizard fields should be pre-filled."""
+        monkeypatch.setattr("app.config.settings.paperless_url", "http://my-paperless:8000")
+        monkeypatch.setattr("app.config.settings.paperless_token", "my-secret-tok")
+        monkeypatch.setattr("app.config.settings.ollama_url", "http://my-ollama:11434")
+        monkeypatch.setattr("app.config.settings.ollama_model", "llama3:8b")
+        r = client.get("/setup")
+        assert r.status_code == 200
+        assert "http://my-paperless:8000" in r.text
+        assert "my-secret-tok" in r.text
+
     def test_step_navigation(self, client):
         # Step 1 → Step 2
         r = client.post(
