@@ -36,6 +36,23 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v
 
+      - name: Dependency compatibility check
+        run: pip check
+
+      - name: Security audit
+        run: pip install pip-audit && pip-audit || true
+
+      - name: Template syntax check
+        run: |
+          python -c "
+          from jinja2 import Environment, FileSystemLoader
+          env = Environment(loader=FileSystemLoader('app/templates'))
+          templates = env.list_templates()
+          for t in templates:
+              env.get_template(t)
+          print(f'All {len(templates)} templates OK')
+          "
+
       - name: Import check
         run: python -c "import app.main"
 
