@@ -35,10 +35,11 @@ async def review_list(request: Request):
                ORDER BY created_at DESC"""
         ).fetchall()
     suggestions = [_row_to_suggestion(r) for r in rows]
+    paperless_url = request.app.state.paperless.base_url
     return request.app.state.templates.TemplateResponse(
         request,
         "review.html",
-        {"suggestions": suggestions},
+        {"suggestions": suggestions, "paperless_url": paperless_url},
     )
 
 
@@ -81,6 +82,24 @@ async def review_detail(request: Request, suggestion_id: int):
 
     paperless_url = request.app.state.paperless.base_url
 
+    # Build {id: name} lookups for resolving original IDs to display names
+    corr_lookup = {c.id: c.name for c in correspondents}
+    dt_lookup = {d.id: d.name for d in doctypes}
+    sp_lookup = {sp.id: sp.name for sp in storage_paths}
+    tag_lookup = {t.id: t.name for t in tags}
+
+    # Resolve original entity IDs to names
+    original_correspondent_name = corr_lookup.get(suggestion.original_correspondent)
+    original_doctype_name = dt_lookup.get(suggestion.original_doctype)
+    original_storage_path_name = sp_lookup.get(suggestion.original_storage_path)
+    original_tag_names = []
+    if suggestion.original_tags_json:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
+            original_tag_names = [
+                tag_lookup[tid] for tid in json.loads(suggestion.original_tags_json)
+                if tid in tag_lookup
+            ]
+
     return request.app.state.templates.TemplateResponse(
         request,
         "review_detail.html",
@@ -94,6 +113,10 @@ async def review_detail(request: Request, suggestion_id: int):
             "raw_response_formatted": raw_formatted,
             "context_docs": context_docs,
             "paperless_url": paperless_url,
+            "original_correspondent_name": original_correspondent_name,
+            "original_doctype_name": original_doctype_name,
+            "original_storage_path_name": original_storage_path_name,
+            "original_tag_names": original_tag_names,
         },
     )
 

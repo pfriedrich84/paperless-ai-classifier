@@ -14,7 +14,9 @@
     <div id="suggestion-m-{{ s.id }}" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div class="flex items-start justify-between mb-2">
             <div>
-                <span class="text-sm font-medium text-gray-900">#{{ s.document_id }}</span>
+                <a href="{{ paperless_url }}/documents/{{ s.document_id }}/details"
+                   target="_blank" rel="noopener"
+                   class="text-sm font-medium text-primary-600 hover:text-primary-800 hover:underline">#{{ s.document_id }}</a>
                 <span class="text-xs text-gray-400 ml-2">{{ s.created_at[:16] }}</span>
             </div>
             {% set conf = s.confidence or 0 %}
@@ -61,7 +63,9 @@
             {% for s in suggestions %}
             <tr id="suggestion-{{ s.id }}" class="hover:bg-gray-50 transition-colors">
                 <td class="px-4 py-3">
-                    <div class="text-sm font-medium text-gray-900">#{{ s.document_id }}</div>
+                    <a href="{{ paperless_url }}/documents/{{ s.document_id }}/details"
+                       target="_blank" rel="noopener"
+                       class="text-sm font-medium text-primary-600 hover:text-primary-800 hover:underline">#{{ s.document_id }}</a>
                     <div class="text-xs text-gray-400">{{ s.created_at[:16] }}</div>
                 </td>
                 <td class="px-4 py-3">
