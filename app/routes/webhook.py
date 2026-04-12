@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.config import settings
+from app.indexer import is_reindexing
 from app.worker import _process_document
 
 log = structlog.get_logger(__name__)
@@ -34,6 +35,13 @@ async def paperless_webhook(
     ):
         log.warning("webhook auth failed", document_id=payload.document_id)
         return JSONResponse(status_code=403, content={"detail": "Invalid webhook secret"})
+
+    if is_reindexing():
+        log.info("reindex in progress — rejecting webhook", document_id=payload.document_id)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Reindex in progress, try again later"},
+        )
 
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
