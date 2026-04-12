@@ -3,12 +3,53 @@ services:
     image: ghcr.io/pfriedrich84/paperless-ai-classifier:latest
     container_name: paperless-ai-classifier
     restart: unless-stopped
-    # Environment variables can be set via:
-    #   - env_file: .env (uncomment below)
-    #   - Dockhand GUI environment editor
-    #   - docker compose --env-file .env up
-    # env_file:
-    #   - .env
+    environment:
+      # --- Paperless-NGX (required) ---
+      PAPERLESS_URL: ${PAPERLESS_URL}
+      PAPERLESS_TOKEN: ${PAPERLESS_TOKEN}
+      PAPERLESS_INBOX_TAG_ID: ${PAPERLESS_INBOX_TAG_ID}
+      KEEP_INBOX_TAG: ${KEEP_INBOX_TAG:-true}
+
+      # --- Ollama ---
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:4b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text-v2-moe}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-300}
+
+      # --- Worker ---
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-300}
+      CONTEXT_MAX_DOCS: ${CONTEXT_MAX_DOCS:-5}
+      MAX_DOC_CHARS: ${MAX_DOC_CHARS:-8000}
+      AUTO_COMMIT_CONFIDENCE: ${AUTO_COMMIT_CONFIDENCE:-0}
+      ENABLE_OCR_CORRECTION: ${ENABLE_OCR_CORRECTION:-false}
+
+      # --- GUI ---
+      GUI_PORT: ${GUI_PORT:-8088}
+      GUI_BASE_URL: ${GUI_BASE_URL:-}
+      GUI_USERNAME: ${GUI_USERNAME:-}
+      GUI_PASSWORD: ${GUI_PASSWORD:-}
+
+      # --- Telegram ---
+      ENABLE_TELEGRAM: ${ENABLE_TELEGRAM:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_POLL_INTERVAL: ${TELEGRAM_POLL_INTERVAL:-5}
+
+      # --- Webhook ---
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+
+      # --- MCP ---
+      ENABLE_MCP: ${ENABLE_MCP:-false}
+      MCP_TRANSPORT: ${MCP_TRANSPORT:-sse}
+      MCP_PORT: ${MCP_PORT:-3001}
+      MCP_HOST: ${MCP_HOST:-0.0.0.0}
+      MCP_ENABLE_WRITE: ${MCP_ENABLE_WRITE:-false}
+      MCP_API_KEY: ${MCP_API_KEY:-}
+      MCP_CLASSIFY_RATE_LIMIT: ${MCP_CLASSIFY_RATE_LIMIT:-10}
+
+      # --- Storage / Logging ---
+      DATA_DIR: ${DATA_DIR:-/data}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "${GUI_PORT:-8088}:8088"
       - "${MCP_PORT:-3001}:3001"   # MCP SSE (nur bei ENABLE_MCP=true)
