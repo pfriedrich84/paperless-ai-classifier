@@ -1,6 +1,5 @@
 services:
   paperless-ai-classifier:
-    build: .
     image: ghcr.io/pfriedrich84/paperless-ai-classifier:latest
     container_name: paperless-ai-classifier
     restart: unless-stopped
