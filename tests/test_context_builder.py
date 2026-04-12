@@ -8,7 +8,11 @@ import pytest
 
 from app.config import settings
 from app.models import PaperlessDocument, PaperlessEntity
-from app.pipeline.context_builder import find_similar_documents
+from app.pipeline.context_builder import (
+    find_similar_by_id,
+    find_similar_documents,
+    find_similar_with_distances,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -33,7 +37,19 @@ def _make_doc(doc_id: int, *, inbox: bool = False, **kwargs) -> PaperlessDocumen
 
 def _mock_db_rows(doc_ids: list[int]):
     """Create a mock get_conn that returns the given document IDs from an embedding query."""
-    rows = [{"document_id": did} for did in doc_ids]
+    rows = [{"document_id": did, "distance": 0.1 * (i + 1)} for i, did in enumerate(doc_ids)]
+
+    mock_conn = MagicMock()
+    mock_conn.execute.return_value.fetchall.return_value = rows
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=False)
+
+    return MagicMock(return_value=mock_conn)
+
+
+def _mock_db_rows_with_distance(doc_ids_distances: list[tuple[int, float]]):
+    """Create a mock get_conn returning document IDs with distance scores."""
+    rows = [{"document_id": did, "distance": dist} for did, dist in doc_ids_distances]
 
     mock_conn = MagicMock()
     mock_conn.execute.return_value.fetchall.return_value = rows
@@ -220,3 +236,147 @@ class TestFullPromptWithContext:
         result = await find_similar_documents(target, paperless, mock_ollama, limit=5)
         assert result == []
         mock_ollama.embed.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# find_similar_with_distances
+# ---------------------------------------------------------------------------
+class TestFindSimilarWithDistances:
+    @pytest.mark.asyncio
+    async def test_returns_distance_scores(self, mock_ollama: AsyncMock):
+        """Results should include distance scores from the KNN query."""
+        doc_a = _make_doc(10)
+        doc_b = _make_doc(20)
+        target = _make_doc(42, inbox=True)
+
+        paperless = AsyncMock()
+        paperless.get_document = AsyncMock(
+            side_effect=lambda doc_id: {10: doc_a, 20: doc_b}[doc_id]
+        )
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            _mock_db_rows_with_distance([(10, 0.15), (20, 0.42)]),
+        ):
+            results = await find_similar_with_distances(target, paperless, mock_ollama, limit=5)
+
+        assert len(results) == 2
+        assert results[0].document.id == 10
+        assert results[0].distance == 0.15
+        assert results[1].document.id == 20
+        assert results[1].distance == 0.42
+
+    @pytest.mark.asyncio
+    async def test_inbox_filter_with_distances(self, mock_ollama: AsyncMock):
+        """Inbox docs should be excluded, preserving distances for kept docs."""
+        classified = _make_doc(10)
+        inbox_doc = _make_doc(20, inbox=True)
+        target = _make_doc(42, inbox=True)
+
+        paperless = AsyncMock()
+        paperless.get_document = AsyncMock(
+            side_effect=lambda doc_id: {10: classified, 20: inbox_doc}[doc_id]
+        )
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            _mock_db_rows_with_distance([(10, 0.2), (20, 0.3)]),
+        ):
+            results = await find_similar_with_distances(target, paperless, mock_ollama, limit=5)
+
+        assert len(results) == 1
+        assert results[0].document.id == 10
+        assert results[0].distance == 0.2
+
+    @pytest.mark.asyncio
+    async def test_delegates_to_find_similar_documents(self, mock_ollama: AsyncMock):
+        """find_similar_documents should return the same docs (without distances)."""
+        doc_a = _make_doc(10)
+        target = _make_doc(42, inbox=True)
+
+        paperless = AsyncMock()
+        paperless.get_document = AsyncMock(return_value=doc_a)
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            _mock_db_rows_with_distance([(10, 0.25)]),
+        ):
+            result = await find_similar_documents(target, paperless, mock_ollama, limit=5)
+
+        assert len(result) == 1
+        assert result[0].id == 10
+        # Result is PaperlessDocument, not SimilarDocument
+        assert not hasattr(result[0], "distance")
+
+
+# ---------------------------------------------------------------------------
+# find_similar_by_id
+# ---------------------------------------------------------------------------
+class TestFindSimilarById:
+    def test_returns_empty_for_unknown_doc(self):
+        """If the document has no embedding, return empty list."""
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchone.return_value = None
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            MagicMock(return_value=mock_conn),
+        ):
+            result = find_similar_by_id(999, limit=5)
+
+        assert result == []
+
+    def test_returns_id_distance_pairs(self):
+        """Should return (doc_id, distance) tuples excluding source doc."""
+        mock_conn = MagicMock()
+
+        # First call: fetch the embedding for the source doc
+        embedding_row = {"embedding": b"\x00" * 768 * 4}
+        # Second call: KNN results
+        knn_rows = [
+            {"document_id": 42, "distance": 0.0},  # self — should be excluded
+            {"document_id": 10, "distance": 0.15},
+            {"document_id": 20, "distance": 0.32},
+        ]
+        mock_conn.execute.side_effect = [
+            MagicMock(fetchone=MagicMock(return_value=embedding_row)),
+            MagicMock(fetchall=MagicMock(return_value=knn_rows)),
+        ]
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            MagicMock(return_value=mock_conn),
+        ):
+            result = find_similar_by_id(42, limit=5)
+
+        assert result == [(10, 0.15), (20, 0.32)]
+
+    def test_respects_limit(self):
+        """Should not return more than `limit` results."""
+        mock_conn = MagicMock()
+
+        embedding_row = {"embedding": b"\x00" * 768 * 4}
+        knn_rows = [
+            {"document_id": 42, "distance": 0.0},
+            {"document_id": 10, "distance": 0.1},
+            {"document_id": 20, "distance": 0.2},
+            {"document_id": 30, "distance": 0.3},
+        ]
+        mock_conn.execute.side_effect = [
+            MagicMock(fetchone=MagicMock(return_value=embedding_row)),
+            MagicMock(fetchall=MagicMock(return_value=knn_rows)),
+        ]
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            MagicMock(return_value=mock_conn),
+        ):
+            result = find_similar_by_id(42, limit=2)
+
+        assert len(result) == 2

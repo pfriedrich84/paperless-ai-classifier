@@ -208,6 +208,9 @@
                        class="text-primary-600 hover:text-primary-800 hover:underline">
                         {{ cd.title }}
                     </a>
+                    {% if cd.distance is defined and cd.distance is not none %}
+                    <span class="text-xs text-gray-400 font-mono">({{ "%.4f"|format(cd.distance) }})</span>
+                    {% endif %}
                 </li>
                 {% endfor %}
             </ul>

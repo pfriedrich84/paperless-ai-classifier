@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.pipeline import classifier, context_builder
 from app.pipeline.committer import commit_suggestion
+from app.pipeline.context_builder import SimilarDocument
 from app.pipeline.ocr_correction import maybe_correct_ocr
 from app.telegram_handler import notify_suggestion
 
@@ -104,7 +105,7 @@ def _store_suggestion(
     doctypes: list[PaperlessEntity],
     storage_paths: list[PaperlessEntity],
     existing_tags: list[PaperlessEntity],
-    context_docs: list[PaperlessDocument] | None = None,
+    similar_results: list[SimilarDocument] | None = None,
 ) -> SuggestionRow:
     """Persist a classification result to the ``suggestions`` table."""
     corr_id = _resolve_entity(result.correspondent, correspondents)
@@ -116,7 +117,10 @@ def _store_suggestion(
     )
 
     context_json = json.dumps(
-        [{"id": d.id, "title": d.title} for d in (context_docs or [])],
+        [
+            {"id": r.document.id, "title": r.document.title, "distance": round(r.distance, 6)}
+            for r in (similar_results or [])
+        ],
         ensure_ascii=False,
     )
 
@@ -235,7 +239,10 @@ async def _process_document(
         doc = doc.model_copy(update={"content": text})
 
     # Context: similar documents
-    context_docs = await context_builder.find_similar_documents(doc, paperless, ollama)
+    similar_results = await context_builder.find_similar_with_distances(
+        doc, paperless, ollama,
+    )
+    context_docs = [r.document for r in similar_results]
 
     # Classify
     result, raw_response = await classifier.classify(
@@ -257,7 +264,7 @@ async def _process_document(
         doctypes,
         storage_paths,
         tags,
-        context_docs=context_docs,
+        similar_results=similar_results,
     )
 
     # Notify via Telegram (only if not auto-committing)

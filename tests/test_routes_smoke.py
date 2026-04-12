@@ -68,6 +68,15 @@ class TestRouteSmoke:
         r = client.get("/settings")
         assert r.status_code == 200
 
+    def test_embeddings(self, client):
+        r = client.get("/embeddings")
+        assert r.status_code == 200
+        assert "Embeddings" in r.text
+
+    def test_embeddings_search(self, client):
+        r = client.get("/embeddings/search")
+        assert r.status_code == 200
+
     def test_healthz(self, client):
         r = client.get("/healthz")
         assert r.status_code == 200
