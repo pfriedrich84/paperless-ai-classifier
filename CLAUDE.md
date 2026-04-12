@@ -125,6 +125,27 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8088
 ```
 
+## Pre-Commit Checks (WICHTIG)
+
+**Vor jedem Commit muessen diese Checks lokal bestanden werden:**
+
+```bash
+ruff check app/ tests/          # Lint
+ruff format --check app/ tests/ # Formatting
+pytest tests/ -v                # Tests
+```
+
+Bei Fehlern: `ruff format app/ tests/` und `ruff check --fix app/ tests/` ausfuehren,
+dann erneut pruefen. Erst committen wenn alle drei Checks gruen sind.
+
+Die CI-Pipeline (`lint-and-verify` Job) fuehrt zusaetzlich aus:
+- `pip check` (Dependency-Kompatibilitaet)
+- `pip-audit` (CVE-Scan)
+- `python scripts/check_dependency_age.py --min-days 14` (Supply-Chain)
+- Template-Syntax-Check (alle Jinja2-Templates werden geladen)
+- `python -c "import app.main"` (Import-Check)
+- DB-Schema-Check, Prompt-File-Check
+
 ## Telegram-Bot (optional)
 
 Wenn `ENABLE_TELEGRAM=true` und `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` gesetzt:
