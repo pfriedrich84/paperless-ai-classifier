@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup — Paperless AI Classifier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+    <link rel="stylesheet" href="/static/app.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe',
+                            300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1',
+                            600: '#4f46e5', 700: '#4338ca', 800: '#3730a3',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full flex items-center justify-center p-4">
+
+<div class="w-full max-w-2xl">
+    <!-- Header -->
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Paperless AI Classifier</h1>
+        <p class="mt-2 text-sm text-gray-500">Setup Wizard</p>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="flex items-center justify-center mb-8">
+        {% set steps = ["Paperless", "Ollama", "Telegram", "Summary"] %}
+        {% for s in steps %}
+        <div class="flex items-center">
+            <div class="flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium
+                {% if loop.index < step %}
+                    bg-green-500 text-white
+                {% elif loop.index == step %}
+                    bg-primary-600 text-white
+                {% else %}
+                    bg-gray-200 text-gray-500
+                {% endif %}">
+                {% if loop.index < step %}
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                {% else %}
+                    {{ loop.index }}
+                {% endif %}
+            </div>
+            <span class="ml-2 text-sm font-medium
+                {% if loop.index == step %}text-primary-700{% else %}text-gray-500{% endif %}">
+                {{ s }}
+            </span>
+            {% if not loop.last %}
+            <div class="mx-4 w-12 h-0.5
+                {% if loop.index < step %}bg-green-500{% else %}bg-gray-200{% endif %}"></div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Wizard card -->
+    <div id="wizard-step" class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+
+        {% if step == 1 %}
+        <!-- ============================================================ -->
+        <!-- Step 1: Paperless -->
+        <!-- ============================================================ -->
+        <div>
+            <h2 class="text-xl font-semibold text-gray-900 mb-1">Paperless-NGX Connection</h2>
+            <p class="text-sm text-gray-500 mb-6">Connect to your Paperless-NGX instance.</p>
+
+            <form id="step-form">
+                <!-- Carry forward values from other steps -->
+                {% for k, v in values.items() %}
+                {% if k not in ["paperless_url", "paperless_token", "paperless_inbox_tag_id"] %}
+                <input type="hidden" name="{{ k }}" value="{{ v }}">
+                {% endif %}
+                {% endfor %}
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="paperless_url" class="block text-sm font-medium text-gray-700 mb-1">Paperless URL</label>
+                        <input type="url" id="paperless_url" name="paperless_url"
+                               value="{{ values.get('paperless_url', 'http://paperless:8000') }}"
+                               placeholder="http://paperless:8000"
+                               class="block w-full rounded-lg border-gray-300 shadow-sm
+                                      focus:border-primary-500 focus:ring-primary-500 text-sm px-3 py-2 border"
+                               required>
+                    </div>
+                    <div>
+                        <label for="paperless_token" class="block text-sm font-medium text-gray-700 mb-1">API Token</label>
+                        <input type="password" id="paperless_token" name="paperless_token"
+                               value="{{ values.get('paperless_token', '') }}"
+                               placeholder="your-api-token"
+                               class="block w-full rounded-lg border-gray-300 shadow-sm
+                                      focus:border-primary-500 focus:ring-primary-500 text-sm px-3 py-2 border"
+                               required>
+                        <p class="text-xs text-gray-500 mt-1">Settings &rarr; API Tokens in Paperless-NGX</p>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="button"
+                            hx-post="/setup/test-paperless"
+                            hx-include="#step-form"
+                            hx-target="#test-result"
+                            hx-swap="innerHTML"
+                            hx-indicator="#test-spinner"
+                            class="inline-flex items-center px-4 py-2
+                                   bg-gray-600 text-white text-sm font-medium rounded-lg
+                                   hover:bg-gray-700 transition-colors">
+                        <svg id="test-spinner" class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Test Connection
+                    </button>
+                </div>
+
+                <div id="test-result" class="mt-2">
+                    {% if values.get('paperless_inbox_tag_id') %}
+                    <div class="text-green-700 text-sm font-medium mt-2">Connected (previously tested).</div>
+                    <input type="hidden" name="paperless_inbox_tag_id" value="{{ values.get('paperless_inbox_tag_id') }}">
+                    {% endif %}
+                </div>
+
+                <div class="mt-8 flex justify-end">
+                    <button type="button"
+                            hx-post="/setup/step/2"
+                            hx-include="#step-form"
+                            hx-target="#wizard-step"
+                            hx-swap="outerHTML"
+                            class="inline-flex items-center px-6 py-2.5
+                                   bg-primary-600 text-white text-sm font-medium rounded-lg
+                                   hover:bg-primary-700 transition-colors">
+                        Next
+                        <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        {% elif step == 2 %}
+        <!-- ============================================================ -->
+        <!-- Step 2: Ollama -->
+        <!-- ============================================================ -->
+        <div>
+            <h2 class="text-xl font-semibold text-gray-900 mb-1">Ollama AI Backend</h2>
+            <p class="text-sm text-gray-500 mb-6">Configure the local LLM for classification.</p>
+
+            <form id="step-form">
+                {% for k, v in values.items() %}
+                {% if k not in ["ollama_url", "ollama_model"] %}
+                <input type="hidden" name="{{ k }}" value="{{ v }}">
+                {% endif %}
+                {% endfor %}
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="ollama_url" class="block text-sm font-medium text-gray-700 mb-1">Ollama URL</label>
+                        <input type="url" id="ollama_url" name="ollama_url"
+                               value="{{ values.get('ollama_url', 'http://ollama:11434') }}"
+                               placeholder="http://ollama:11434"
+                               class="block w-full rounded-lg border-gray-300 shadow-sm
+                                      focus:border-primary-500 focus:ring-primary-500 text-sm px-3 py-2 border">
+                    </div>
+                    <div>
+                        <label for="ollama_model" class="block text-sm font-medium text-gray-700 mb-1">Chat Model</label>
+                        <input type="text" id="ollama_model" name="ollama_model"
+                               value="{{ values.get('ollama_model', 'gemma4:e2b') }}"
+                               placeholder="gemma4:e2b"
+                               class="block w-full rounded-lg border-gray-300 shadow-sm
+                                      focus:border-primary-500 focus:ring-primary-500 text-sm px-3 py-2 border">
+                        <p class="text-xs text-gray-500 mt-1">Use "Test Connection" to see available models.</p>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="button"
+                            hx-post="/setup/test-ollama"
+                            hx-include="#step-form"
+                            hx-target="#test-result"
+                            hx-swap="innerHTML"
+                            hx-indicator="#test-spinner"
+                            class="inline-flex items-center px-4 py-2
+                                   bg-gray-600 text-white text-sm font-medium rounded-lg
+                                   hover:bg-gray-700 transition-colors">
+                        <svg id="test-spinner" class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Test Connection
+                    </button>
+                </div>
+
+                <div id="test-result"></div>
+
+                <div class="mt-8 flex justify-between">
+                    <button type="button"
+                            hx-post="/setup/step/1"
+                            hx-include="#step-form"
+                            hx-target="#wizard-step"
+                            hx-swap="outerHTML"
+                            class="inline-flex items-center px-6 py-2.5
+                                   bg-gray-200 text-gray-700 text-sm font-medium rounded-lg
+                                   hover:bg-gray-300 transition-colors">
+                        <svg class="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        Back
+                    </button>
+                    <button type="button"
+                            hx-post="/setup/step/3"
+                            hx-include="#step-form"
+                            hx-target="#wizard-step"
+                            hx-swap="outerHTML"
+                            class="inline-flex items-center px-6 py-2.5
+                                   bg-primary-600 text-white text-sm font-medium rounded-lg
+                                   hover:bg-primary-700 transition-colors">
+                        Next
+                        <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        {% elif step == 3 %}
+        <!-- ============================================================ -->
+        <!-- Step 3: Telegram (optional) -->
+        <!-- ============================================================ -->
+        <div>
+            <h2 class="text-xl font-semibold text-gray-900 mb-1">Telegram Notifications</h2>
+            <p class="text-sm text-gray-500 mb-6">Optional: get notified and approve/reject via Telegram.</p>
+
+            <form id="step-form">
+                {% for k, v in values.items() %}
+                {% if k not in ["enable_telegram", "telegram_bot_token", "telegram_chat_id"] %}
+                <input type="hidden" name="{{ k }}" value="{{ v }}">
+                {% endif %}
+                {% endfor %}
+
+                <div class="space-y-4">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="enable_telegram" name="enable_telegram" value="true"
+                               {{ "checked" if values.get("enable_telegram", "").lower() in ("true", "1", "on") else "" }}
+                               class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded">
+                        <label for="enable_telegram" class="ml-2 text-sm font-medium text-gray-700">Enable Telegram</label>
+                    </div>
+                    <div>
+                        <label for="telegram_bot_token" class="block text-sm font-medium text-gray-700 mb-1">Bot Token</label>
+                        <input type="password" id="telegram_bot_token" name="telegram_bot_token"
+                               value="{{ values.get('telegram_bot_token', '') }}"
+                               placeholder="123456:ABC-DEF..."
+                               class="block w-full rounded-lg border-gray-300 shadow-sm
+                                      focus:border-primary-500 focus:ring-primary-500 text-sm px-3 py-2 border">
+                        <p class="text-xs text-gray-500 mt-1">Get from <code>@BotFather</code> on Telegram.</p>
+                    </div>
+                    <div>
+                        <label for="telegram_chat_id" class="block text-sm font-medium text-gray-700 mb-1">Chat ID</label>
+                        <input type="text" id="telegram_chat_id" name="telegram_chat_id"
+                               value="{{ values.get('telegram_chat_id', '') }}"
+                               placeholder="-100..."
+                               class="block w-full rounded-lg border-gray-300 shadow-sm
+                                      focus:border-primary-500 focus:ring-primary-500 text-sm px-3 py-2 border">
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="button"
+                            hx-post="/setup/test-telegram"
+                            hx-include="#step-form"
+                            hx-target="#test-result"
+                            hx-swap="innerHTML"
+                            hx-indicator="#test-spinner"
+                            class="inline-flex items-center px-4 py-2
+                                   bg-gray-600 text-white text-sm font-medium rounded-lg
+                                   hover:bg-gray-700 transition-colors">
+                        <svg id="test-spinner" class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Send Test Message
+                    </button>
+                </div>
+
+                <div id="test-result"></div>
+
+                <div class="mt-8 flex justify-between">
+                    <button type="button"
+                            hx-post="/setup/step/2"
+                            hx-include="#step-form"
+                            hx-target="#wizard-step"
+                            hx-swap="outerHTML"
+                            class="inline-flex items-center px-6 py-2.5
+                                   bg-gray-200 text-gray-700 text-sm font-medium rounded-lg
+                                   hover:bg-gray-300 transition-colors">
+                        <svg class="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                        Back
+                    </button>
+                    <div class="flex space-x-3">
+                        <button type="button"
+                                hx-post="/setup/step/4"
+                                hx-include="#step-form"
+                                hx-target="#wizard-step"
+                                hx-swap="outerHTML"
+                                class="inline-flex items-center px-6 py-2.5
+                                       bg-gray-200 text-gray-700 text-sm font-medium rounded-lg
+                                       hover:bg-gray-300 transition-colors">
+                            Skip
+                        </button>
+                        <button type="button"
+                                hx-post="/setup/step/4"
+                                hx-include="#step-form"
+                                hx-target="#wizard-step"
+                                hx-swap="outerHTML"
+                                class="inline-flex items-center px-6 py-2.5
+                                       bg-primary-600 text-white text-sm font-medium rounded-lg
+                                       hover:bg-primary-700 transition-colors">
+                            Next
+                            <svg class="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        {% elif step == 4 %}
+        <!-- ============================================================ -->
+        <!-- Step 4: Summary -->
+        <!-- ============================================================ -->
+        <div>
+            <h2 class="text-xl font-semibold text-gray-900 mb-1">Review Configuration</h2>
+            <p class="text-sm text-gray-500 mb-6">Verify your settings before completing setup.</p>
+
+            <form id="step-form">
+                {% for k, v in values.items() %}
+                <input type="hidden" name="{{ k }}" value="{{ v }}">
+                {% endfor %}
+            </form>
+
+            <table class="w-full text-sm">
+                <tbody class="divide-y divide-gray-100">
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-gray-600">Paperless URL</td>
+                        <td class="py-2 text-gray-900 font-mono">{{ values.get("paperless_url", "—") }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-gray-600">API Token</td>
+                        <td class="py-2 text-gray-900 font-mono">***</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-gray-600">Inbox Tag ID</td>
+                        <td class="py-2 text-gray-900 font-mono">{{ values.get("paperless_inbox_tag_id", "—") }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-gray-600">Ollama URL</td>
+                        <td class="py-2 text-gray-900 font-mono">{{ values.get("ollama_url", "http://ollama:11434") }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-gray-600">Chat Model</td>
+                        <td class="py-2 text-gray-900 font-mono">{{ values.get("ollama_model", "gemma4:e2b") }}</td>
+                    </tr>
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2 pr-4 font-medium text-gray-600">Telegram</td>
+                        <td class="py-2 text-gray-900">
+                            {% if values.get("enable_telegram", "").lower() in ("true", "1", "on") %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Enabled</span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">Disabled</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="mt-8 flex justify-between">
+                <button type="button"
+                        hx-post="/setup/step/3"
+                        hx-include="#step-form"
+                        hx-target="#wizard-step"
+                        hx-swap="outerHTML"
+                        class="inline-flex items-center px-6 py-2.5
+                               bg-gray-200 text-gray-700 text-sm font-medium rounded-lg
+                               hover:bg-gray-300 transition-colors">
+                    <svg class="mr-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    Back
+                </button>
+                <button type="button"
+                        hx-post="/setup/complete"
+                        hx-include="#step-form"
+                        hx-target="#complete-result"
+                        hx-swap="innerHTML"
+                        hx-indicator="#complete-spinner"
+                        class="inline-flex items-center px-6 py-2.5
+                               bg-green-600 text-white text-sm font-medium rounded-lg
+                               hover:bg-green-700 transition-colors">
+                    <svg id="complete-spinner" class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Complete Setup
+                </button>
+            </div>
+            <div id="complete-result" class="mt-3"></div>
+        </div>
+
+        {% endif %}
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center mt-6 text-sm text-gray-400">
+        Paperless AI Classifier v0.1.0
+    </div>
+</div>
+
+</body>
+</html>

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from typing import Any
+
 import structlog
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
-from app.config import settings
+from app.config import FIELD_META, needs_setup, settings
 from app.db import get_conn
 from app.indexer import get_reindex_progress, start_reindex_task
 from app.pipeline.classifier import _load_system_prompt, _prompt_override_path
@@ -18,21 +21,21 @@ router = APIRouter(prefix="/settings")
 MAX_PROMPT_SIZE = 50 * 1024  # 50 KB
 
 
-def _masked_config() -> list[tuple[str, str]]:
-    """Return config key-value pairs with sensitive values masked."""
-    items = []
-    for field_name in settings.model_fields:
-        value = getattr(settings, field_name)
-        display = str(value)
-        if "token" in field_name.lower() or "password" in field_name.lower():
-            display = "***" if value else "(not set)"
-        items.append((field_name, display))
-    return items
+def _build_config_groups() -> OrderedDict[str, list[tuple[str, dict[str, Any], Any]]]:
+    """Group settings fields by category for the editable form."""
+    groups: OrderedDict[str, list[tuple[str, dict[str, Any], Any]]] = OrderedDict()
+    for field_name, meta in FIELD_META.items():
+        cat = meta["category"]
+        value = getattr(settings, field_name, "")
+        if cat not in groups:
+            groups[cat] = []
+        groups[cat].append((field_name, meta, value))
+    return groups
 
 
 @router.get("")
 async def settings_page(request: Request):
-    config_items = _masked_config()
+    config_groups = _build_config_groups()
     try:
         system_prompt = _load_system_prompt()
     except Exception:
@@ -43,11 +46,61 @@ async def settings_page(request: Request):
         request,
         "settings.html",
         {
-            "config_items": config_items,
+            "config_groups": config_groups,
             "system_prompt": system_prompt,
             "is_custom_prompt": is_custom,
             "reindex": progress,
+            "needs_setup": needs_setup(),
         },
+    )
+
+
+@router.post("/save-config")
+async def save_config_route(request: Request):
+    """Save configuration changes from the settings form."""
+    from app.config_writer import apply_runtime_changes, save_config
+
+    form = dict(await request.form())
+
+    # Build updates dict from form fields (only known settings fields)
+    updates: dict[str, Any] = {}
+    for field_name in FIELD_META:
+        if field_name in form:
+            updates[field_name] = form[field_name]
+        elif FIELD_META[field_name]["input_type"] == "bool":
+            # Unchecked checkboxes are not submitted — treat as false
+            updates[field_name] = "false"
+
+    if not updates:
+        return HTMLResponse(
+            '<div class="text-gray-500 text-sm font-medium mt-2">No changes detected.</div>'
+        )
+
+    changed, restart_required = save_config(updates)
+
+    if not changed:
+        return HTMLResponse(
+            '<div class="text-gray-500 text-sm font-medium mt-2">No changes detected.</div>'
+        )
+
+    # Apply runtime changes for non-restart fields
+    runtime_fields = {k: v for k, v in changed.items() if k not in restart_required}
+    actions: list[str] = []
+    if runtime_fields:
+        actions = await apply_runtime_changes(request.app, changed)
+
+    parts = []
+    applied = [k for k in changed if k not in restart_required]
+    if applied:
+        parts.append(f"Applied: {', '.join(applied)}")
+    if restart_required:
+        parts.append(f"Requires restart: {', '.join(restart_required)}")
+    if actions:
+        parts.append(f"Actions: {', '.join(actions)}")
+
+    msg = ". ".join(parts) + "." if parts else "Saved."
+    return HTMLResponse(
+        f'<div class="text-green-700 text-sm font-medium mt-2">Saved. {msg}</div>'
     )
 
 

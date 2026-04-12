@@ -21,7 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.clients.telegram import TelegramClient
-from app.config import settings
+from app.config import needs_setup, settings
 from app.db import init_db
 from app.telegram_handler import start_telegram, stop_telegram
 from app.worker import start_scheduler, stop_scheduler
@@ -127,6 +127,25 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 # ---------------------------------------------------------------------------
+# Middleware: Setup redirect (first-run wizard)
+# ---------------------------------------------------------------------------
+class SetupRedirectMiddleware(BaseHTTPMiddleware):
+    """Redirect all non-setup traffic to /setup when essential config is missing."""
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if needs_setup() and not (
+            path.startswith("/setup")
+            or path.startswith("/static")
+            or path in ("/healthz",)
+        ):
+            from starlette.responses import RedirectResponse
+
+            return RedirectResponse(url="/setup", status_code=302)
+        return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
 # Optional Basic Auth
 # ---------------------------------------------------------------------------
 security = HTTPBasic(auto_error=False)
@@ -142,6 +161,10 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
 
         # Webhook has its own auth via WEBHOOK_SECRET
         if path.startswith("/webhook"):
+            return await call_next(request)
+
+        # Setup wizard is accessible without auth (guarded by its own flow)
+        if path.startswith("/setup"):
             return await call_next(request)
 
         auth = request.headers.get("Authorization")
@@ -174,6 +197,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("starting paperless-ai-classifier")
 
     init_db()
+    app.state.templates = templates
+
+    if needs_setup():
+        log.info("essential config missing — entering setup mode")
+        app.state.paperless = None
+        app.state.ollama = None
+        app.state.telegram = None
+        yield
+        log.info("shutdown complete (setup mode)")
+        return
 
     paperless = PaperlessClient()
     ollama = OllamaClient()
@@ -181,7 +214,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.paperless = paperless
     app.state.ollama = ollama
     app.state.telegram = telegram
-    app.state.templates = templates
 
     # Healthchecks — warning only, don't fail startup
     if not await paperless.ping():
@@ -212,6 +244,7 @@ app = FastAPI(
 # Middleware (order matters: outermost first)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(SetupRedirectMiddleware)
 if settings.gui_username and settings.gui_password:
     app.add_middleware(BasicAuthMiddleware)
 
@@ -232,7 +265,9 @@ async def healthz():
 # ---------------------------------------------------------------------------
 from app.routes import errors, inbox, index, ocr, review, stats, tags, webhook  # noqa: E402
 from app.routes import settings as settings_routes  # noqa: E402
+from app.routes import setup as setup_routes  # noqa: E402
 
+app.include_router(setup_routes.router)
 app.include_router(index.router)
 app.include_router(inbox.router)
 app.include_router(review.router)
