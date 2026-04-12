@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml ./
 RUN pip install --upgrade pip \
     && pip install \
-        "fastapi>=0.115.0" \
+        "fastapi>=0.115.0,<1.0.0" \
         "uvicorn[standard]>=0.32.0" \
         "httpx>=0.27.0" \
         "pydantic>=2.9.0" \
