@@ -237,10 +237,14 @@ async def reprocess_document(request: Request, document_id: int):
     ollama = request.app.state.ollama
     paperless_url = settings.paperless_url.rstrip("/")
 
-    # Clear previous processing state
+    # Clear previous processing state + old pending suggestions
     with get_conn() as conn:
         conn.execute(
             "DELETE FROM processed_documents WHERE document_id = ?",
+            (document_id,),
+        )
+        conn.execute(
+            "UPDATE suggestions SET status = 'superseded' WHERE document_id = ? AND status = 'pending'",
             (document_id,),
         )
 

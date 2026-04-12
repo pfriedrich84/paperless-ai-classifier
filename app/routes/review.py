@@ -25,7 +25,14 @@ def _row_to_suggestion(row) -> SuggestionRow:
 async def review_list(request: Request):
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM suggestions WHERE status = 'pending' ORDER BY created_at DESC"
+            """SELECT * FROM suggestions
+               WHERE status = 'pending'
+                 AND id = (
+                     SELECT MAX(s2.id) FROM suggestions s2
+                     WHERE s2.document_id = suggestions.document_id
+                       AND s2.status = 'pending'
+                 )
+               ORDER BY created_at DESC"""
         ).fetchall()
     suggestions = [_row_to_suggestion(r) for r in rows]
     return request.app.state.templates.TemplateResponse(
