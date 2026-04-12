@@ -119,7 +119,7 @@ Reverse Proxy: Zoraxy (kein Traefik). Keine Ports gegen Internet.
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -c constraints.txt -e ".[dev]"
 cp .env.example .env
 # Werte eintragen
 uvicorn app.main:app --reload --port 8088
@@ -169,6 +169,143 @@ MCP_TRANSPORT=sse MCP_PORT=3001 python -m app.mcp_server
 **Resources:**
 - `paperless://suggestions/pending` — Offene Vorschlaege
 - `paperless://stats` — Classifier-Statistiken (Suggestions, Errors, Tags)
+
+## Supply-Chain-Schutz (Dependency-Pinning)
+
+### Hintergrund: Was ist eine Supply-Chain-Attacke?
+
+Eine Supply-Chain-Attacke (Lieferkettenangriff) zielt nicht direkt auf unseren Code,
+sondern auf die Abhaengigkeiten, die wir von externen Quellen (PyPI) beziehen.
+Typische Angriffsvektoren:
+
+- **Account-Takeover:** Ein Angreifer uebernimmt das PyPI-Konto eines Maintainers
+  und veroeffentlicht eine kompromittierte Version eines beliebten Pakets.
+- **Typosquatting:** Ein Paket mit aehnlichem Namen (z.B. `requestes` statt `requests`)
+  enthaelt Schadcode.
+- **Malicious Update:** Schadcode wird in ein regulaeres Update eingeschleust —
+  z.B. ein Cryptominer, Credential-Stealer oder Backdoor.
+- **Dependency Confusion:** Ein internes Paket wird durch ein gleichnamiges
+  oeffentliches Paket mit hoeherer Versionsnummer ersetzt.
+
+Das Problem: `pip install fastapi>=0.115.0` installiert *immer die neueste Version*.
+Wird diese Version Minuten nach der Veroeffentlichung kompromittiert, sind alle
+Installationen betroffen — bevor die Community den Angriff bemerkt.
+
+### Unsere Strategie: 14-Tage-Mindestalter
+
+Wir installieren **nur Versionen, die mindestens 14 Tage oeffentlich verfuegbar sind**.
+Die Logik dahinter:
+
+1. **Erkennungsfenster:** Die meisten kompromittierten Pakete werden innerhalb von
+   Stunden bis wenigen Tagen entdeckt und von PyPI entfernt.
+2. **Community-Review:** Nach 14 Tagen haben tausende Entwickler die Version
+   installiert und potenzielle Probleme haetten sich gezeigt.
+3. **Automatische Erkennung:** Tools wie `pip-audit`, Sicherheitsscanner und
+   GitHub-Advisories decken bekannte Schwachstellen typischerweise innerhalb
+   einer Woche auf.
+4. **Kosten-Nutzen:** 14 Tage Verzoegerung sind fuer eine Self-Hosted-App akzeptabel —
+   wir brauchen keine Bleeding-Edge-Features am Erscheinungstag.
+
+### Implementierung
+
+Die Schutzmassnahmen bestehen aus vier Dateien und einem CI-Check:
+
+#### 1. `pyproject.toml` — Direkte Abhaengigkeiten
+
+Jede direkte Abhaengigkeit hat eine **Obergrenze** (`<=`), die auf die letzte
+als sicher bekannte Version zeigt:
+
+```toml
+dependencies = [
+    "fastapi>=0.115.0,<=0.135.2",    # Untergrenze = Mindestfeature, Obergrenze = geprueft
+    "uvicorn[standard]>=0.32.0,<=0.42.0",
+    ...
+]
+```
+
+#### 2. `constraints.txt` — Transitive Abhaengigkeiten
+
+Abhaengigkeiten unserer Abhaengigkeiten (z.B. `rich` kommt ueber `mcp → typer → rich`)
+werden hier nach oben begrenzt:
+
+```
+rich<=14.3.3
+click<=8.3.1
+cryptography<=46.0.7   # Security-Fix-Ausnahme, siehe unten
+...
+```
+
+pip wendet Constraints bei jeder Installation an:
+`pip install -c constraints.txt -e ".[dev]"`
+
+#### 3. `scripts/check_dependency_age.py` — CI-Pruefung
+
+Dieses Skript fragt fuer jedes installierte Paket die PyPI-API nach dem
+Veroeffentlichungsdatum und schlaegt fehl, wenn ein Paket juenger als 14 Tage ist:
+
+```bash
+python scripts/check_dependency_age.py --min-days 14
+```
+
+#### 4. `.dependency-age-allowlist` — Ausnahmen fuer Security-Patches
+
+Manchmal muss ein Sicherheits-Patch *sofort* eingespielt werden, auch wenn er
+weniger als 14 Tage alt ist. Diese Ausnahmen werden hier dokumentiert:
+
+```
+# Security fix for CVE-2026-39892 (released 2026-04-08, remove after 2026-04-22)
+cryptography==46.0.7
+```
+
+**Regeln fuer Ausnahmen:**
+- Nur fuer CVE-Fixes von etablierten Paketen.
+- Jeder Eintrag muss die CVE-Nummer und das Ablaufdatum enthalten.
+- Nach 14 Tagen wird der Eintrag entfernt (das Paket ist dann alt genug).
+
+#### 5. `.pip-audit-known-vulnerabilities` — Bekannte Audit-Ausnahmen
+
+CVEs in Build-Tools (z.B. `pip` selbst), die keine Laufzeit-Abhaengigkeiten sind:
+
+```
+CVE-2025-8869
+CVE-2026-1703
+```
+
+### Dependency-Update-Workflow
+
+Wenn eine neue Version eines Pakets eingespielt werden soll:
+
+1. **Pruefen:** Ist die Version mindestens 14 Tage alt?
+   ```bash
+   curl -s https://pypi.org/pypi/<paket>/<version>/json | python3 -c "
+   import sys,json; print(json.load(sys.stdin)['urls'][0]['upload_time'])"
+   ```
+2. **Anheben:** Obergrenze in `pyproject.toml` (direkt) oder `constraints.txt`
+   (transitiv) auf die neue Version setzen.
+3. **Installieren:** `pip install -c constraints.txt -e ".[dev]"`
+4. **Testen:** Alle CI-Checks lokal ausfuehren (Lint, Tests, Audit, Age-Check).
+5. **Committen:** Aenderung an `pyproject.toml` / `constraints.txt` committen.
+
+**Bei Security-Patches (< 14 Tage alt):**
+- Version in `constraints.txt` anheben.
+- Eintrag in `.dependency-age-allowlist` mit CVE-Nummer und Ablaufdatum.
+- Nach 14 Tagen: Eintrag aus Allowlist entfernen.
+
+### CI-Pipeline-Uebersicht
+
+```
+Install (mit constraints.txt)
+  → Ruff Lint + Format
+  → Tests (pytest)
+  → pip check (Kompatibilitaet)
+  → pip-audit (bekannte CVEs)
+  → Dependency Age Check (14-Tage-Regel)
+  → Template-Syntax
+  → Import-Check
+  → DB-Schema-Check
+  → Prompt-File-Check
+  → Docker Build
+```
 
 ## Bekannte TODOs / Ausbau
 

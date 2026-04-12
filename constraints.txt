@@ -1,0 +1,15 @@
+# Supply-chain protection: pin transitive dependencies to versions
+# that are at least 14 days old. Update only after the new version
+# has been publicly available for >= 14 days.
+#
+# Last reviewed: 2026-04-12
+
+rich<=14.3.3
+click<=8.3.1
+# cryptography 46.0.7 is a security fix for CVE-2026-39892 (allowed as age exception)
+cryptography<=46.0.7
+charset-normalizer<=3.4.6
+platformdirs<=4.9.4
+requests<=2.33.0
+sse-starlette<=3.3.4
+pygments<=2.20.0

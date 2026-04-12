@@ -84,9 +84,15 @@ def _content_snippet(text: str | None, max_len: int = 150) -> str:
     return cut + "..."
 
 
-def _build_item(doc, status: str, suggestion: dict | None,
-                corr_lookup: dict, dt_lookup: dict, tag_lookup: dict,
-                paperless_url: str) -> dict:
+def _build_item(
+    doc,
+    status: str,
+    suggestion: dict | None,
+    corr_lookup: dict,
+    dt_lookup: dict,
+    tag_lookup: dict,
+    paperless_url: str,
+) -> dict:
     """Build an enriched item dict for a single document."""
     return {
         "id": doc.id,
@@ -152,10 +158,17 @@ async def inbox_list(request: Request):
     for doc in docs:
         status = _get_processing_status(doc.id)
         suggestion = _get_suggestion_for_doc(doc.id)
-        items.append(_build_item(
-            doc, status, suggestion,
-            corr_lookup, dt_lookup, tag_lookup, paperless_url,
-        ))
+        items.append(
+            _build_item(
+                doc,
+                status,
+                suggestion,
+                corr_lookup,
+                dt_lookup,
+                tag_lookup,
+                paperless_url,
+            )
+        )
 
     # Status counts
     counts = Counter(item["status"] for item in items)
@@ -194,7 +207,9 @@ async def document_status(request: Request, document_id: int):
             "paperless_url": paperless_url,
             "suggestion_id": suggestion["id"] if suggestion else None,
             "proposed_title": suggestion["proposed_title"] if suggestion else None,
-            "proposed_correspondent": suggestion["proposed_correspondent_name"] if suggestion else None,
+            "proposed_correspondent": suggestion["proposed_correspondent_name"]
+            if suggestion
+            else None,
             "proposed_doctype": suggestion["proposed_doctype_name"] if suggestion else None,
             "confidence": suggestion["confidence"] if suggestion else None,
             "correspondent_name": None,
@@ -208,8 +223,7 @@ async def document_status(request: Request, document_id: int):
     except Exception:
         corr_lookup, dt_lookup, tag_lookup = {}, {}, {}
 
-    item = _build_item(doc, status, suggestion,
-                       corr_lookup, dt_lookup, tag_lookup, paperless_url)
+    item = _build_item(doc, status, suggestion, corr_lookup, dt_lookup, tag_lookup, paperless_url)
 
     return HTMLResponse(_render_card(request, item))
 
@@ -253,9 +267,9 @@ async def reprocess_document(request: Request, document_id: int):
             "tag_names": [],
         }
         response = HTMLResponse(_render_card(request, item))
-        response.headers["HX-Trigger"] = json.dumps({
-            "showToast": {"message": f"Failed to fetch document #{document_id}", "type": "error"}
-        })
+        response.headers["HX-Trigger"] = json.dumps(
+            {"showToast": {"message": f"Failed to fetch document #{document_id}", "type": "error"}}
+        )
         return response
 
     # Mark as processing immediately (use empty last_updated_at so
@@ -276,8 +290,13 @@ async def reprocess_document(request: Request, document_id: int):
             storage_paths = await paperless.list_storage_paths()
             tags = await paperless.list_tags()
             await _process_document(
-                doc, paperless, ollama,
-                correspondents, doctypes, storage_paths, tags,
+                doc,
+                paperless,
+                ollama,
+                correspondents,
+                doctypes,
+                storage_paths,
+                tags,
             )
         except Exception as exc:
             log.error("background reprocess failed", doc_id=document_id, error=str(exc))
@@ -300,13 +319,14 @@ async def reprocess_document(request: Request, document_id: int):
         corr_lookup, dt_lookup, tag_lookup = {}, {}, {}
 
     suggestion = _get_suggestion_for_doc(document_id)
-    item = _build_item(doc, "processing", suggestion,
-                       corr_lookup, dt_lookup, tag_lookup, paperless_url)
+    item = _build_item(
+        doc, "processing", suggestion, corr_lookup, dt_lookup, tag_lookup, paperless_url
+    )
 
     response = HTMLResponse(_render_card(request, item))
-    response.headers["HX-Trigger"] = json.dumps({
-        "showToast": {"message": f"Processing document #{document_id}...", "type": "info"}
-    })
+    response.headers["HX-Trigger"] = json.dumps(
+        {"showToast": {"message": f"Processing document #{document_id}...", "type": "info"}}
+    )
     return response
 
 
@@ -329,8 +349,7 @@ async def process_inbox_bulk(request: Request):
     except Exception as exc:
         log.error("bulk process-inbox: failed to fetch inbox", error=str(exc))
         return HTMLResponse(
-            '<div class="text-red-600 text-sm font-medium mt-2">'
-            f"Failed to fetch inbox: {exc}</div>"
+            f'<div class="text-red-600 text-sm font-medium mt-2">Failed to fetch inbox: {exc}</div>'
         )
 
     # Filter to unprocessed / error only
@@ -342,7 +361,9 @@ async def process_inbox_bulk(request: Request):
         )
 
     _bulk_progress = BulkProcessProgress(
-        running=True, total=len(to_process), mode="inbox",
+        running=True,
+        total=len(to_process),
+        mode="inbox",
     )
 
     async def _run():
@@ -363,8 +384,13 @@ async def process_inbox_bulk(request: Request):
                             (doc.id,),
                         )
                     await _process_document(
-                        doc, paperless, ollama,
-                        correspondents, doctypes, storage_paths, tags,
+                        doc,
+                        paperless,
+                        ollama,
+                        correspondents,
+                        doctypes,
+                        storage_paths,
+                        tags,
                     )
                     _bulk_progress.succeeded += 1
                 except Exception as exc:
@@ -407,9 +433,7 @@ async def process_all_docs(request: Request):
         )
 
     if not docs:
-        return HTMLResponse(
-            '<div class="text-gray-500 text-sm mt-2">No documents found.</div>'
-        )
+        return HTMLResponse('<div class="text-gray-500 text-sm mt-2">No documents found.</div>')
 
     # Filter to docs not already successfully processed
     to_process = [d for d in docs if _get_processing_status(d.id) in ("unprocessed", "error")]
@@ -420,7 +444,9 @@ async def process_all_docs(request: Request):
         )
 
     _bulk_progress = BulkProcessProgress(
-        running=True, total=len(to_process), mode="all",
+        running=True,
+        total=len(to_process),
+        mode="all",
     )
 
     async def _run():
@@ -441,8 +467,13 @@ async def process_all_docs(request: Request):
                             (doc.id,),
                         )
                     await _process_document(
-                        doc, paperless, ollama,
-                        correspondents, doctypes, storage_paths, tags,
+                        doc,
+                        paperless,
+                        ollama,
+                        correspondents,
+                        doctypes,
+                        storage_paths,
+                        tags,
                     )
                     _bulk_progress.succeeded += 1
                 except Exception as exc:
@@ -482,29 +513,33 @@ def _render_bulk_progress() -> str:
             ' hx-trigger="every 2s" hx-swap="outerHTML">'
             '<div class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-4">'
             '<div class="flex justify-between text-sm text-blue-800 mb-2">'
-            f'<span>Processing {mode_label}...</span>'
-            f'<span>{p.done} / {p.total}'
-            f'{" (" + str(p.failed) + " failed)" if p.failed else ""}</span>'
-            '</div>'
+            f"<span>Processing {mode_label}...</span>"
+            f"<span>{p.done} / {p.total}"
+            f"{' (' + str(p.failed) + ' failed)' if p.failed else ''}</span>"
+            "</div>"
             '<div class="w-full bg-blue-200 rounded-full h-2.5">'
             '<div class="bg-blue-600 h-2.5 rounded-full transition-all duration-500"'
             f' style="width: {pct}%"></div>'
-            '</div>'
-            '</div></div>'
+            "</div>"
+            "</div></div>"
         )
 
     if p.total > 0:
         # Just finished
         success = p.succeeded
         failed = p.failed
-        css = "bg-green-50 border-green-200 text-green-800" if failed == 0 else "bg-amber-50 border-amber-200 text-amber-800"
+        css = (
+            "bg-green-50 border-green-200 text-green-800"
+            if failed == 0
+            else "bg-amber-50 border-amber-200 text-amber-800"
+        )
         return (
             f'<div id="bulk-progress">'
             f'<div class="mt-3 {css} border rounded-lg p-4 text-sm">'
-            f'Done: {success} processed'
-            f'{", " + str(failed) + " failed" if failed else ""}'
+            f"Done: {success} processed"
+            f"{', ' + str(failed) + ' failed' if failed else ''}"
             f' &mdash; <a href="/inbox" class="underline font-medium">Refresh page</a>'
-            f'</div></div>'
+            f"</div></div>"
         )
 
     return '<div id="bulk-progress"></div>'

@@ -25,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -c constraints.txt -e ".[dev]"
 
       - name: Ruff lint
         run: ruff check app/ tests/
@@ -40,7 +40,18 @@ jobs:
         run: pip check
 
       - name: Security audit
-        run: pip install pip-audit && pip-audit || true
+        run: |
+          pip install -c constraints.txt pip-audit
+          ARGS=""
+          while IFS= read -r line; do
+            line="${line%%#*}"
+            line="$(echo "$line" | xargs)"
+            [ -n "$line" ] && ARGS="$ARGS --ignore-vuln $line"
+          done < .pip-audit-known-vulnerabilities
+          eval pip-audit $ARGS
+
+      - name: Dependency age check (supply-chain protection)
+        run: python scripts/check_dependency_age.py --min-days 14
 
       - name: Template syntax check
         run: |

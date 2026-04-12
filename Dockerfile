@@ -13,22 +13,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Dependencies
-COPY pyproject.toml ./
+# Dependencies (pinned with constraints for supply-chain protection)
+COPY pyproject.toml constraints.txt ./
 RUN pip install --upgrade pip \
-    && pip install \
-        "fastapi>=0.115.0,<1.0.0" \
-        "uvicorn[standard]>=0.32.0" \
+    && pip install -c constraints.txt \
+        "fastapi>=0.115.0,<=0.135.2" \
+        "uvicorn[standard]>=0.32.0,<=0.42.0" \
         "httpx>=0.27.0" \
         "pydantic>=2.9.0" \
         "pydantic-settings>=2.5.0" \
         "jinja2>=3.1.4" \
-        "python-multipart>=0.0.12" \
+        "python-multipart>=0.0.12,<=0.0.22" \
         "apscheduler>=3.10.4" \
         "structlog>=24.4.0" \
-        "sqlite-vec>=0.1.3" \
-        "numpy>=2.0.0" \
-        "mcp[cli]>=1.20.0"
+        "sqlite-vec>=0.1.3,<=0.1.7" \
+        "numpy>=2.0.0,<=2.4.4" \
+        "mcp[cli]>=1.20.0,<=1.26.0"
 
 # App
 COPY app ./app

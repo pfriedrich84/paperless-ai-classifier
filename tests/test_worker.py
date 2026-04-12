@@ -147,7 +147,13 @@ class TestProcessDocumentReturn:
 
         with structlog.testing.capture_logs() as logs:
             result = await _process_document(
-                doc, AsyncMock(), AsyncMock(), [], [], [], [],
+                doc,
+                AsyncMock(),
+                AsyncMock(),
+                [],
+                [],
+                [],
+                [],
             )
 
         assert result == "skipped"

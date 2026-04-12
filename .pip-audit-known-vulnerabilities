@@ -1,0 +1,5 @@
+# Known vulnerabilities to ignore in pip-audit.
+# These are in pip itself (the package manager), not in project dependencies.
+# pip is upgraded separately in the CI runner and Docker build.
+CVE-2025-8869
+CVE-2026-1703

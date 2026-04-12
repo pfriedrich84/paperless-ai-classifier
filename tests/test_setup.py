@@ -67,7 +67,11 @@ class TestSetupWizard:
         # Step 1 → Step 2
         r = client.post(
             "/setup/step/2",
-            data={"paperless_url": "http://p:8000", "paperless_token": "tok", "paperless_inbox_tag_id": "5"},
+            data={
+                "paperless_url": "http://p:8000",
+                "paperless_token": "tok",
+                "paperless_inbox_tag_id": "5",
+            },
         )
         assert r.status_code == 200
         assert "Ollama" in r.text
@@ -221,7 +225,10 @@ class TestCompleteSetup:
         mock_telegram.enabled = False
 
         with (
-            patch("app.config_writer.save_config", return_value=({"paperless_url": "http://p:8000"}, set())),
+            patch(
+                "app.config_writer.save_config",
+                return_value=({"paperless_url": "http://p:8000"}, set()),
+            ),
             patch("app.clients.paperless.PaperlessClient", return_value=mock_paperless),
             patch("app.clients.ollama.OllamaClient", return_value=mock_ollama),
             patch("app.clients.telegram.TelegramClient", return_value=mock_telegram),
@@ -268,7 +275,9 @@ class TestSettingsSave:
     def test_save_config_with_changes(self, client):
         with (
             patch("app.config_writer.save_config", return_value=({"max_doc_chars": 5000}, set())),
-            patch("app.config_writer.apply_runtime_changes", new_callable=AsyncMock, return_value=[]),
+            patch(
+                "app.config_writer.apply_runtime_changes", new_callable=AsyncMock, return_value=[]
+            ),
         ):
             r = client.post(
                 "/settings/save-config",
@@ -281,7 +290,9 @@ class TestSettingsSave:
     def test_save_config_restart_required(self, client):
         with (
             patch("app.config_writer.save_config", return_value=({"gui_port": 9999}, {"gui_port"})),
-            patch("app.config_writer.apply_runtime_changes", new_callable=AsyncMock, return_value=[]),
+            patch(
+                "app.config_writer.apply_runtime_changes", new_callable=AsyncMock, return_value=[]
+            ),
         ):
             r = client.post(
                 "/settings/save-config",
