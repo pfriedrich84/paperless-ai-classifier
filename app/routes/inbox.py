@@ -34,6 +34,7 @@ class BulkProcessProgress:
 
 _bulk_progress = BulkProcessProgress()
 _bulk_task: asyncio.Task | None = None
+_reprocess_tasks: set[asyncio.Task] = set()
 
 
 # ---------------------------------------------------------------------------
@@ -87,13 +88,6 @@ def _build_item(doc, status: str, suggestion: dict | None,
                 corr_lookup: dict, dt_lookup: dict, tag_lookup: dict,
                 paperless_url: str) -> dict:
     """Build an enriched item dict for a single document."""
-    proposed_tags = []
-    if suggestion and suggestion.get("proposed_tags_json"):
-        try:
-            proposed_tags = json.loads(suggestion["proposed_tags_json"])
-        except (json.JSONDecodeError, TypeError):
-            pass
-
     return {
         "id": doc.id,
         "title": doc.title,
@@ -295,7 +289,9 @@ async def reprocess_document(request: Request, document_id: int):
                     (document_id, ""),
                 )
 
-    asyncio.create_task(_run_reprocess())
+    task = asyncio.create_task(_run_reprocess())
+    _reprocess_tasks.add(task)
+    task.add_done_callback(_reprocess_tasks.discard)
 
     # Return card in processing state immediately
     try:
