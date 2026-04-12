@@ -69,6 +69,11 @@
     </div>
 </nav>
 
+<!-- Reindex banner (polls for active reindex) -->
+<div id="reindex-banner" hx-get="/settings/reindex-banner"
+     hx-trigger="load, every 10s" hx-swap="innerHTML">
+</div>
+
 <!-- Main content -->
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     {% block content %}{% endblock %}

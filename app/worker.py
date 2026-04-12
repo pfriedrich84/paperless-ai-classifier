@@ -13,6 +13,7 @@ from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
 from app.db import get_conn
+from app.indexer import is_reindexing
 from app.models import (
     ClassificationResult,
     PaperlessDocument,
@@ -295,6 +296,10 @@ async def poll_inbox() -> None:
     """Fetch inbox documents and run the classification pipeline."""
     if _paperless is None or _ollama is None:
         log.error("worker not initialised — skipping poll")
+        return
+
+    if is_reindexing():
+        log.info("reindex in progress — skipping poll")
         return
 
     log.info("polling inbox")

@@ -171,9 +171,7 @@ def build_user_prompt(
 
     target_chars = min(_tokens_to_chars(target_budget_tokens), settings.max_doc_chars)
     context_chars_per_doc = (
-        _tokens_to_chars(context_budget_tokens // len(active_context))
-        if active_context
-        else 0
+        _tokens_to_chars(context_budget_tokens // len(active_context)) if active_context else 0
     )
 
     # --- Assemble prompt ---

@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.db import get_conn
-from app.indexer import reindex_all
+from app.indexer import get_reindex_progress, start_reindex_task
 from app.pipeline.classifier import _load_system_prompt, _prompt_override_path
 from app.worker import poll_inbox
 
@@ -38,6 +38,7 @@ async def settings_page(request: Request):
     except Exception:
         system_prompt = "(failed to load prompt)"
     is_custom = _prompt_override_path().is_file()
+    progress = get_reindex_progress()
     return request.app.state.templates.TemplateResponse(
         request,
         "settings.html",
@@ -45,6 +46,7 @@ async def settings_page(request: Request):
             "config_items": config_items,
             "system_prompt": system_prompt,
             "is_custom_prompt": is_custom,
+            "reindex": progress,
         },
     )
 
@@ -70,18 +72,69 @@ async def trigger_reindex(request: Request):
     log.info("manual reindex triggered")
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
-    try:
-        count = await reindex_all(paperless, ollama)
+
+    started = start_reindex_task(paperless, ollama)
+    if not started:
         return HTMLResponse(
-            f'<div class="text-green-700 text-sm font-medium mt-2">'
-            f"Reindex complete — {count} documents indexed</div>"
+            '<div class="text-amber-600 text-sm font-medium mt-2">Reindex is already running</div>'
         )
-    except Exception as exc:
-        log.error("reindex failed", error=str(exc))
-        return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">Reindex failed: {exc}</div>',
-            status_code=500,
+
+    return HTMLResponse(_render_reindex_progress(get_reindex_progress()))
+
+
+@router.get("/reindex-status")
+async def reindex_status(request: Request):
+    return HTMLResponse(_render_reindex_progress(get_reindex_progress()))
+
+
+@router.get("/reindex-banner")
+async def reindex_banner(request: Request):
+    progress = get_reindex_progress()
+    if not progress.running:
+        return HTMLResponse("")
+    return HTMLResponse(
+        f'<div class="bg-amber-50 border-b border-amber-200 px-4 py-2'
+        f' text-center text-sm text-amber-800">'
+        f"Reindex in progress ({progress.done}/{progress.total} documents)"
+        f" — inbox processing is paused</div>"
+    )
+
+
+def _render_reindex_progress(progress) -> str:
+    """Build an HTML fragment for the reindex progress area."""
+    if progress.running:
+        pct = int(progress.done / progress.total * 100) if progress.total > 0 else 0
+        return (
+            '<div id="reindex-result" hx-get="/settings/reindex-status"'
+            ' hx-trigger="every 2s" hx-swap="outerHTML">'
+            '<div class="mt-2">'
+            '<div class="flex justify-between text-sm text-gray-600 mb-1">'
+            "<span>Reindexing…</span>"
+            f"<span>{progress.done} / {progress.total} documents</span>"
+            "</div>"
+            '<div class="w-full bg-gray-200 rounded-full h-2.5">'
+            '<div class="bg-primary-600 h-2.5 rounded-full transition-all duration-500"'
+            f' style="width: {pct}%"></div>'
+            "</div>"
+            "</div></div>"
         )
+
+    if progress.error:
+        return (
+            '<div id="reindex-result">'
+            '<div class="text-red-600 text-sm font-medium mt-2">'
+            f"Reindex failed: {progress.error}</div></div>"
+        )
+
+    if progress.finished_at:
+        done = progress.done - progress.failed
+        return (
+            '<div id="reindex-result">'
+            '<div class="text-green-700 text-sm font-medium mt-2">'
+            f"Reindex complete — {done} documents indexed</div></div>"
+        )
+
+    return '<div id="reindex-result"></div>'
 
 
 @router.post("/update-prompt")
