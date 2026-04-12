@@ -96,7 +96,8 @@ async def review_detail(request: Request, suggestion_id: int):
     if suggestion.original_tags_json:
         with contextlib.suppress(json.JSONDecodeError, TypeError):
             original_tag_names = [
-                tag_lookup[tid] for tid in json.loads(suggestion.original_tags_json)
+                tag_lookup[tid]
+                for tid in json.loads(suggestion.original_tags_json)
                 if tid in tag_lookup
             ]
 
