@@ -1,0 +1,130 @@
+<div id="doc-{{ item.id }}"
+     class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow
+            {{ 'processing-pulse' if item.status == 'processing' else '' }}"
+     {% if item.status == 'processing' %}
+     hx-get="/inbox/{{ item.id }}/status"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML"
+     {% endif %}>
+    <div class="flex flex-col sm:flex-row sm:items-start gap-3">
+        <!-- Main content area -->
+        <div class="flex-1 min-w-0">
+            <!-- Header: ID, status, confidence -->
+            <div class="flex items-center gap-2 flex-wrap">
+                <a href="{{ item.paperless_url }}/documents/{{ item.id }}/details"
+                   target="_blank" rel="noopener"
+                   class="text-xs font-mono text-primary-600 hover:text-primary-800 hover:underline">#{{ item.id }}</a>
+
+                {% set status = item.status %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                    {% if status == 'processing' %}bg-blue-100 text-blue-800
+                    {% elif status == 'unprocessed' %}bg-gray-100 text-gray-700
+                    {% elif status == 'pending' %}bg-amber-100 text-amber-800
+                    {% elif status in ('committed', 'accepted') %}bg-green-100 text-green-800
+                    {% elif status in ('rejected', 'error') %}bg-red-100 text-red-800
+                    {% else %}bg-gray-100 text-gray-700{% endif %}">
+                    {% if status == 'processing' %}
+                    <svg class="animate-spin -ml-0.5 mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    {% endif %}
+                    {{ status }}
+                </span>
+
+                {% if item.confidence is not none %}
+                {% set conf = item.confidence %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                    {{ 'bg-green-100 text-green-800' if conf >= 80 else ('bg-amber-100 text-amber-800' if conf >= 50 else 'bg-red-100 text-red-800') }}">
+                    {{ conf }}%
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Title -->
+            <h3 class="mt-1 text-sm font-semibold text-gray-900 truncate">
+                {{ item.proposed_title or item.title or '(untitled)' }}
+            </h3>
+            {% if item.proposed_title and item.proposed_title != item.title %}
+            <p class="text-xs text-gray-400 truncate">Original: {{ item.title }}</p>
+            {% endif %}
+
+            <!-- Content snippet -->
+            {% if item.content_snippet %}
+            <p class="mt-1 text-xs text-gray-500 line-clamp-2">{{ item.content_snippet }}</p>
+            {% endif %}
+
+            <!-- Metadata pills -->
+            <div class="mt-2 flex flex-wrap gap-1.5">
+                {% if item.proposed_correspondent or item.correspondent_name %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-blue-50 text-blue-700">
+                    <svg class="w-3 h-3 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                    </svg>
+                    {{ item.proposed_correspondent or item.correspondent_name }}
+                </span>
+                {% endif %}
+                {% if item.proposed_doctype or item.doctype_name %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-purple-50 text-purple-700">
+                    <svg class="w-3 h-3 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                    </svg>
+                    {{ item.proposed_doctype or item.doctype_name }}
+                </span>
+                {% endif %}
+                {% for tag in (item.tag_names or [])[:3] %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-600">
+                    {{ tag }}
+                </span>
+                {% endfor %}
+                {% if (item.tag_names or [])|length > 3 %}
+                <span class="text-xs text-gray-400">+{{ (item.tag_names or [])|length - 3 }} more</span>
+                {% endif %}
+            </div>
+
+            <!-- Date info -->
+            <div class="mt-1.5 text-xs text-gray-400">
+                {% if item.created_date %}{{ item.created_date }}{% endif %}
+                {% if item.created_date and item.added %} &middot; {% endif %}
+                {% if item.added %}Added {{ item.added }}{% endif %}
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex sm:flex-col gap-2 flex-shrink-0">
+            <a href="{{ item.paperless_url }}/documents/{{ item.id }}/details"
+               target="_blank" rel="noopener"
+               class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-lg
+                      bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors">
+                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                </svg>
+                View
+            </a>
+            {% if item.suggestion_id %}
+            <a href="/review/{{ item.suggestion_id }}"
+               class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-lg
+                      bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors">
+                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+                Review
+            </a>
+            {% endif %}
+            {% if item.status != 'processing' %}
+            <button hx-post="/inbox/{{ item.id }}/reprocess"
+                    hx-target="#doc-{{ item.id }}"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="this"
+                    class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-lg
+                           bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors">
+                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                Reprocess
+            </button>
+            {% endif %}
+        </div>
+    </div>
+</div>

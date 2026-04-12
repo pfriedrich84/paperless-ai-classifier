@@ -86,5 +86,21 @@
     </div>
 </footer>
 
+<!-- Toast container -->
+<div id="toast-container"></div>
+<script>
+document.body.addEventListener("showToast", function(evt) {
+    var d = evt.detail;
+    var msg = (typeof d === "string") ? d : (d.message || d.value || "");
+    var type = (d && d.type) || "success";
+    if (!msg) return;
+    var toast = document.createElement("div");
+    toast.className = "toast toast-" + type;
+    toast.textContent = msg;
+    document.getElementById("toast-container").appendChild(toast);
+    setTimeout(function() { toast.remove(); }, 4000);
+});
+</script>
+
 </body>
 </html>
