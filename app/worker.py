@@ -11,8 +11,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
-from app.indexer import is_reindexing
 from app.db import get_conn
+from app.indexer import is_reindexing
 from app.models import (
     ClassificationResult,
     PaperlessDocument,

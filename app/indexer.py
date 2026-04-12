@@ -33,6 +33,7 @@ class ReindexProgress:
 
 
 _reindex_progress = ReindexProgress()
+_reindex_task: asyncio.Task | None = None
 
 
 def get_reindex_progress() -> ReindexProgress:
@@ -145,5 +146,6 @@ def start_reindex_task(
         except Exception as exc:
             log.error("background reindex failed", error=str(exc))
 
-    asyncio.create_task(_run())
+    global _reindex_task
+    _reindex_task = asyncio.create_task(_run())
     return True

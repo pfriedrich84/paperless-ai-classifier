@@ -76,8 +76,7 @@ async def trigger_reindex(request: Request):
     started = start_reindex_task(paperless, ollama)
     if not started:
         return HTMLResponse(
-            '<div class="text-amber-600 text-sm font-medium mt-2">'
-            "Reindex is already running</div>"
+            '<div class="text-amber-600 text-sm font-medium mt-2">Reindex is already running</div>'
         )
 
     return HTMLResponse(_render_reindex_progress(get_reindex_progress()))
