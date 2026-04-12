@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS suggestions (
     proposed_storage_path_id    INTEGER,
     proposed_tags_json          TEXT,  -- list of {{name, id_if_known}}
     -- Raw
-    raw_response            TEXT
+    raw_response            TEXT,
+    context_docs_json       TEXT   -- JSON list of context docs used for classification
 );
 CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
 CREATE INDEX IF NOT EXISTS idx_suggestions_doc    ON suggestions(document_id);
@@ -132,13 +133,33 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+_MIGRATIONS: list[tuple[str, str, str]] = [
+    # (table, column, SQL) — applied if column does not exist yet
+    (
+        "suggestions",
+        "context_docs_json",
+        "ALTER TABLE suggestions ADD COLUMN context_docs_json TEXT",
+    ),
+]
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply pending column migrations for existing databases."""
+    for table, column, sql in _MIGRATIONS:
+        cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in cols:
+            conn.execute(sql)
+            log.info("migration applied", table=table, column=column)
+
+
 def init_db() -> None:
-    """Create the database file and apply the schema."""
+    """Create the database file, apply the schema, and run migrations."""
     db_path = settings.db_path
     db_path.parent.mkdir(parents=True, exist_ok=True)
     log.info("initializing database", path=str(db_path))
     with _connect(db_path) as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
     log.info("database ready")
 
 

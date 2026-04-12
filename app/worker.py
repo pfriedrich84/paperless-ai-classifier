@@ -100,6 +100,7 @@ def _store_suggestion(
     doctypes: list[PaperlessEntity],
     storage_paths: list[PaperlessEntity],
     existing_tags: list[PaperlessEntity],
+    context_docs: list[PaperlessDocument] | None = None,
 ) -> SuggestionRow:
     """Persist a classification result to the ``suggestions`` table."""
     corr_id = _resolve_entity(result.correspondent, correspondents)
@@ -108,6 +109,11 @@ def _store_suggestion(
     _resolved_tag_ids, tag_dicts = _resolve_tags(
         [{"name": t.name, "confidence": t.confidence} for t in result.tags],
         existing_tags,
+    )
+
+    context_json = json.dumps(
+        [{"id": d.id, "title": d.title} for d in (context_docs or [])],
+        ensure_ascii=False,
     )
 
     with get_conn() as conn:
@@ -121,8 +127,8 @@ def _store_suggestion(
                 proposed_correspondent_name, proposed_correspondent_id,
                 proposed_doctype_name, proposed_doctype_id,
                 proposed_storage_path_name, proposed_storage_path_id,
-                proposed_tags_json, raw_response
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                proposed_tags_json, raw_response, context_docs_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 doc.id,
@@ -144,6 +150,7 @@ def _store_suggestion(
                 sp_id,
                 json.dumps(tag_dicts, ensure_ascii=False),
                 raw_response,
+                context_json,
             ),
         )
         suggestion_id = cur.lastrowid
@@ -245,6 +252,7 @@ async def _process_document(
         doctypes,
         storage_paths,
         tags,
+        context_docs=context_docs,
     )
 
     # Notify via Telegram (only if not auto-committing)

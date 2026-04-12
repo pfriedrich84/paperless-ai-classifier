@@ -1,18 +1,21 @@
-"""Settings routes — read-only config view and manual triggers."""
+"""Settings routes — config view, prompt editor, and manual triggers."""
 
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
 from app.config import settings
+from app.db import get_conn
 from app.indexer import reindex_all
-from app.pipeline.classifier import _load_system_prompt
+from app.pipeline.classifier import _load_system_prompt, _prompt_override_path
 from app.worker import poll_inbox
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/settings")
+
+MAX_PROMPT_SIZE = 50 * 1024  # 50 KB
 
 
 def _masked_config() -> list[tuple[str, str]]:
@@ -34,9 +37,15 @@ async def settings_page(request: Request):
         system_prompt = _load_system_prompt()
     except Exception:
         system_prompt = "(failed to load prompt)"
+    is_custom = _prompt_override_path().is_file()
     return request.app.state.templates.TemplateResponse(
         "settings.html",
-        {"request": request, "config_items": config_items, "system_prompt": system_prompt},
+        {
+            "request": request,
+            "config_items": config_items,
+            "system_prompt": system_prompt,
+            "is_custom_prompt": is_custom,
+        },
     )
 
 
@@ -73,3 +82,62 @@ async def trigger_reindex(request: Request):
             f'<div class="text-red-600 text-sm font-medium mt-2">Reindex failed: {exc}</div>',
             status_code=500,
         )
+
+
+@router.post("/update-prompt")
+async def update_prompt(request: Request, prompt_text: str = Form(...)):
+    """Save a custom system prompt to the persistent data directory."""
+    if len(prompt_text.encode("utf-8")) > MAX_PROMPT_SIZE:
+        return HTMLResponse(
+            '<div class="text-red-600 text-sm font-medium mt-2">'
+            f"Prompt too large (max {MAX_PROMPT_SIZE // 1024} KB)</div>",
+            status_code=400,
+        )
+
+    path = _prompt_override_path()
+    try:
+        path.write_text(prompt_text, encoding="utf-8")
+        log.info("system prompt updated", path=str(path), size=len(prompt_text))
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO audit_log (action, actor, details) VALUES (?, ?, ?)",
+                ("prompt_update", "user", f"size={len(prompt_text)}"),
+            )
+    except Exception as exc:
+        log.error("prompt save failed", error=str(exc))
+        return HTMLResponse(
+            f'<div class="text-red-600 text-sm font-medium mt-2">Save failed: {exc}</div>',
+            status_code=500,
+        )
+
+    return HTMLResponse('<div class="text-green-700 text-sm font-medium mt-2">Prompt saved</div>')
+
+
+@router.post("/reset-prompt")
+async def reset_prompt(request: Request):
+    """Delete the custom prompt override, reverting to the built-in default."""
+    path = _prompt_override_path()
+    try:
+        path.unlink(missing_ok=True)
+        log.info("system prompt reset to default")
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO audit_log (action, actor, details) VALUES (?, ?, ?)",
+                ("prompt_reset", "user", "reverted to built-in default"),
+            )
+    except Exception as exc:
+        log.error("prompt reset failed", error=str(exc))
+        return HTMLResponse(
+            f'<div class="text-red-600 text-sm font-medium mt-2">Reset failed: {exc}</div>',
+            status_code=500,
+        )
+
+    # Return the default prompt so the textarea updates
+    default_prompt = (settings.prompts_dir / "classify_system.txt").read_text(encoding="utf-8")
+    return HTMLResponse(
+        f'<div class="text-green-700 text-sm font-medium mt-2">Reset to default</div>'
+        f'<textarea id="prompt-text-area" name="prompt_text" rows="20"'
+        f' class="mt-3 block w-full rounded-lg border-gray-300 shadow-sm'
+        f" focus:border-primary-500 focus:ring-primary-500 text-sm font-mono"
+        f' px-3 py-2 border">{default_prompt}</textarea>'
+    )

@@ -94,6 +94,7 @@ class SuggestionRow(BaseModel):
     proposed_tags_json: str | None = None
 
     raw_response: str | None = None
+    context_docs_json: str | None = None
 
 
 # =============================================================================

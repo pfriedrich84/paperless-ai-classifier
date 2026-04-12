@@ -37,6 +37,31 @@ async def stats_page(request: Request):
 
         embedded = conn.execute("SELECT COUNT(*) AS c FROM doc_embedding_meta").fetchone()["c"]
 
+        # Confidence distribution in 5 buckets
+        confidence_dist: dict[str, int] = {}
+        for row in conn.execute(
+            """
+            SELECT
+                CASE
+                    WHEN confidence < 20 THEN '0-19'
+                    WHEN confidence < 40 THEN '20-39'
+                    WHEN confidence < 60 THEN '40-59'
+                    WHEN confidence < 80 THEN '60-79'
+                    ELSE '80-100'
+                END AS bucket,
+                COUNT(*) AS c
+            FROM suggestions
+            WHERE confidence IS NOT NULL
+            GROUP BY bucket
+            ORDER BY MIN(confidence)
+            """
+        ).fetchall():
+            confidence_dist[row["bucket"]] = row["c"]
+
+        unscored = conn.execute(
+            "SELECT COUNT(*) AS c FROM suggestions WHERE confidence IS NULL"
+        ).fetchone()["c"]
+
     return request.app.state.templates.TemplateResponse(
         "stats.html",
         {
@@ -46,5 +71,7 @@ async def stats_page(request: Request):
             "total_docs": total_docs,
             "total_errors": total_errors,
             "embedded": embedded,
+            "confidence_dist": confidence_dist,
+            "unscored": unscored,
         },
     )

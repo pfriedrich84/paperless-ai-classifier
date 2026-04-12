@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import structlog
 
@@ -13,9 +14,17 @@ from app.models import ClassificationResult, PaperlessDocument, PaperlessEntity
 log = structlog.get_logger(__name__)
 
 
+def _prompt_override_path() -> Path:
+    """Path for user-edited prompt override in the persistent data dir."""
+    return Path(settings.data_dir) / "classify_system.txt"
+
+
 def _load_system_prompt() -> str:
-    path = settings.prompts_dir / "classify_system.txt"
-    return path.read_text(encoding="utf-8")
+    """Load system prompt — user override in /data takes precedence over built-in default."""
+    override = _prompt_override_path()
+    if override.is_file():
+        return override.read_text(encoding="utf-8")
+    return (settings.prompts_dir / "classify_system.txt").read_text(encoding="utf-8")
 
 
 def _truncate(text: str, limit: int) -> str:

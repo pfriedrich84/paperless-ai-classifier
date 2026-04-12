@@ -55,6 +55,24 @@ async def review_detail(request: Request, suggestion_id: int):
         with contextlib.suppress(json.JSONDecodeError):
             proposed_tags = json.loads(suggestion.proposed_tags_json)
 
+    # Pretty-print raw LLM response for display
+    raw_formatted = None
+    if suggestion.raw_response:
+        try:
+            raw_formatted = json.dumps(
+                json.loads(suggestion.raw_response), indent=2, ensure_ascii=False
+            )
+        except json.JSONDecodeError:
+            raw_formatted = suggestion.raw_response
+
+    # Parse context docs JSON
+    context_docs = []
+    if suggestion.context_docs_json:
+        with contextlib.suppress(json.JSONDecodeError):
+            context_docs = json.loads(suggestion.context_docs_json)
+
+    paperless_url = request.app.state.paperless.base_url
+
     return request.app.state.templates.TemplateResponse(
         "review_detail.html",
         {
@@ -65,6 +83,9 @@ async def review_detail(request: Request, suggestion_id: int):
             "storage_paths": storage_paths,
             "tags": tags,
             "proposed_tags": proposed_tags,
+            "raw_response_formatted": raw_formatted,
+            "context_docs": context_docs,
+            "paperless_url": paperless_url,
         },
     )
 
