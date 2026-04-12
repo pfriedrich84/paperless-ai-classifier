@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import struct
+from dataclasses import dataclass
 
 import structlog
 
@@ -11,6 +12,15 @@ from app.clients.paperless import PaperlessClient
 from app.config import settings
 from app.db import EMBED_DIM, get_conn
 from app.models import PaperlessDocument
+
+
+@dataclass
+class SimilarDocument:
+    """A document paired with its similarity distance from a query vector."""
+
+    document: PaperlessDocument
+    distance: float
+
 
 log = structlog.get_logger(__name__)
 
@@ -61,13 +71,13 @@ async def index_document(doc: PaperlessDocument, ollama: OllamaClient) -> None:
         )
 
 
-async def find_similar_documents(
+async def find_similar_with_distances(
     doc: PaperlessDocument,
     paperless: PaperlessClient,
     ollama: OllamaClient,
     limit: int | None = None,
-) -> list[PaperlessDocument]:
-    """Return up to `limit` already-classified documents most similar to `doc`.
+) -> list[SimilarDocument]:
+    """Return up to `limit` similar documents with their distance scores.
 
     Documents still in the inbox (carrying the inbox tag) are excluded — they
     have not been reviewed/approved yet and would provide unreliable context.
@@ -94,7 +104,7 @@ async def find_similar_documents(
     with get_conn() as conn:
         rows = conn.execute(
             """
-            SELECT document_id
+            SELECT document_id, distance
               FROM doc_embeddings
              WHERE embedding MATCH ?
                AND k = ?
@@ -109,7 +119,7 @@ async def find_similar_documents(
     if not rows:
         return []
 
-    similar: list[PaperlessDocument] = []
+    similar: list[SimilarDocument] = []
     for row in rows:
         if len(similar) >= limit:
             break
@@ -119,7 +129,58 @@ async def find_similar_documents(
             if inbox_tag_id in d.tags:
                 log.debug("skipping inbox doc as context", doc_id=d.id)
                 continue
-            similar.append(d)
+            similar.append(SimilarDocument(document=d, distance=row["distance"]))
         except Exception as exc:
             log.warning("failed to load similar doc", id=row["document_id"], error=str(exc))
     return similar
+
+
+async def find_similar_documents(
+    doc: PaperlessDocument,
+    paperless: PaperlessClient,
+    ollama: OllamaClient,
+    limit: int | None = None,
+) -> list[PaperlessDocument]:
+    """Return up to `limit` already-classified documents most similar to `doc`.
+
+    Convenience wrapper around :func:`find_similar_with_distances` that strips
+    distance scores for callers that only need the documents.
+    """
+    results = await find_similar_with_distances(doc, paperless, ollama, limit)
+    return [r.document for r in results]
+
+
+def find_similar_by_id(
+    document_id: int,
+    limit: int = 10,
+) -> list[tuple[int, float]]:
+    """KNN search using a document's already-stored embedding.
+
+    Returns ``(doc_id, distance)`` pairs.  Purely local — no Ollama or
+    Paperless API calls required.  Returns an empty list if the document
+    has no embedding.
+    """
+    with get_conn() as conn:
+        embedding_row = conn.execute(
+            "SELECT embedding FROM doc_embeddings WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()
+        if embedding_row is None:
+            return []
+
+        blob = embedding_row["embedding"]
+        k = limit + 1  # +1 to account for the source doc itself
+        rows = conn.execute(
+            """
+            SELECT document_id, distance
+              FROM doc_embeddings
+             WHERE embedding MATCH ?
+               AND k = ?
+             ORDER BY distance
+            """,
+            (blob, k),
+        ).fetchall()
+
+    return [(r["document_id"], r["distance"]) for r in rows if r["document_id"] != document_id][
+        :limit
+    ]
