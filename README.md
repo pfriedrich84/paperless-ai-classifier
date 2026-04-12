@@ -118,6 +118,8 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 | `OLLAMA_URL` | `http://ollama:11434` | Ollama-Endpoint |
 | `OLLAMA_MODEL` | `gemma3:4b` | Klassifikations-Modell |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text-v2-moe` | Embedding-Modell für Kontext (multilingual) |
+| `OLLAMA_EMBED_RETRIES` | `3` | Anzahl Retries bei Embedding-Fehlern (Truncation + transiente 500er) |
+| `OLLAMA_EMBED_RETRY_BASE_DELAY` | `1.0` | Basis-Delay in Sekunden für exponentiellen Backoff |
 | `POLL_INTERVAL_SECONDS` | `300` | Wie oft die Inbox gepollt wird |
 | `CONTEXT_MAX_DOCS` | `5` | Wieviele ähnliche Dokumente in den Prompt |
 | `AUTO_COMMIT_CONFIDENCE` | `0` | Wenn > 0: ab diesem Score automatisch committen (0–100) |
