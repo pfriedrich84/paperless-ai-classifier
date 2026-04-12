@@ -21,6 +21,7 @@ class SimilarDocument:
     document: PaperlessDocument
     distance: float
 
+
 log = structlog.get_logger(__name__)
 
 
@@ -180,8 +181,6 @@ def find_similar_by_id(
             (blob, k),
         ).fetchall()
 
-    return [
-        (r["document_id"], r["distance"])
-        for r in rows
-        if r["document_id"] != document_id
-    ][:limit]
+    return [(r["document_id"], r["distance"]) for r in rows if r["document_id"] != document_id][
+        :limit
+    ]

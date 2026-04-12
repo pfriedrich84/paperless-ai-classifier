@@ -240,7 +240,9 @@ async def _process_document(
 
     # Context: similar documents
     similar_results = await context_builder.find_similar_with_distances(
-        doc, paperless, ollama,
+        doc,
+        paperless,
+        ollama,
     )
     context_docs = [r.document for r in similar_results]
 

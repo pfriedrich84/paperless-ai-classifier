@@ -44,7 +44,8 @@ def _query_embeddings(conn, *, query: str = "", page: int = 1):
         params = ()
 
     total = conn.execute(
-        f"SELECT COUNT(*) AS c FROM doc_embedding_meta {where}", params      ).fetchone()["c"]
+        f"SELECT COUNT(*) AS c FROM doc_embedding_meta {where}", params
+    ).fetchone()["c"]
 
     offset = (page - 1) * _PER_PAGE
     rows = conn.execute(
@@ -54,7 +55,8 @@ def _query_embeddings(conn, *, query: str = "", page: int = 1):
          {where}
          ORDER BY indexed_at DESC
          LIMIT ? OFFSET ?
-        """,          (*params, _PER_PAGE, offset),
+        """,
+        (*params, _PER_PAGE, offset),
     ).fetchall()
 
     return rows, total
@@ -152,7 +154,8 @@ async def similar_documents(request: Request, document_id: int, limit: int = 10)
     placeholders = ",".join("?" * len(doc_ids))
     with get_conn() as conn:
         meta_rows = conn.execute(
-            f"SELECT document_id, title FROM doc_embedding_meta WHERE document_id IN ({placeholders})",              doc_ids,
+            f"SELECT document_id, title FROM doc_embedding_meta WHERE document_id IN ({placeholders})",
+            doc_ids,
         ).fetchall()
     meta_lookup = {r["document_id"]: r["title"] for r in meta_rows}
 
