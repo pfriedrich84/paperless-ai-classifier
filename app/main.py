@@ -70,16 +70,15 @@ def _configure_logging() -> None:
         stdlib_logger = logging.getLogger(name)
         stdlib_logger.handlers.clear()
         stdlib_logger.propagate = False
-        stdlib_logger.addHandler(
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter(
-                logging.StreamHandler(),
-                formatter=structlog.stdlib.ProcessorFormatter(
-                    processor=structlog.dev.ConsoleRenderer()
-                    if settings.log_level.upper() == "DEBUG"
-                    else structlog.processors.JSONRenderer(),
-                ),
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            structlog.stdlib.ProcessorFormatter(
+                processor=structlog.dev.ConsoleRenderer()
+                if settings.log_level.upper() == "DEBUG"
+                else structlog.processors.JSONRenderer(),
             )
         )
+        stdlib_logger.addHandler(handler)
         stdlib_logger.setLevel(log_level)
 
 
