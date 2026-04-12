@@ -1,4 +1,4 @@
-"""Tests for OllamaClient.embed() retry and truncation logic."""
+"""Tests for OllamaClient.embed() retry/truncation and chat_json() parsing."""
 
 from __future__ import annotations
 
@@ -190,3 +190,90 @@ async def test_embed_retry_disabled_when_zero(client: OllamaClient):
 
     assert client.embed_retry_count == 0
     assert client._client.post.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# chat_json — markdown fence stripping + num_ctx
+# ---------------------------------------------------------------------------
+import json
+
+
+def _make_chat_response(content: str) -> httpx.Response:
+    """Build a minimal httpx.Response mimicking an Ollama /api/chat reply."""
+    body = {"message": {"role": "assistant", "content": content}}
+    return httpx.Response(
+        status_code=200,
+        json=body,
+        request=httpx.Request("POST", "http://test/api/chat"),
+    )
+
+
+async def test_chat_json_handles_bare_json(client: OllamaClient):
+    """Clean JSON parses without issues (regression check)."""
+    payload = {"title": "Test", "confidence": 90}
+    client._client.post = AsyncMock(
+        return_value=_make_chat_response(json.dumps(payload))
+    )
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 4096
+        result = await client.chat_json(system="sys", user="usr")
+
+    assert result == payload
+
+
+async def test_chat_json_strips_markdown_fences(client: OllamaClient):
+    """JSON wrapped in ```json ... ``` fences should be parsed successfully."""
+    payload = {"title": "Rechnung", "confidence": 85}
+    fenced = f"```json\n{json.dumps(payload)}\n```"
+    client._client.post = AsyncMock(
+        return_value=_make_chat_response(fenced)
+    )
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 4096
+        result = await client.chat_json(system="sys", user="usr")
+
+    assert result == payload
+
+
+async def test_chat_json_strips_bare_fences(client: OllamaClient):
+    """JSON wrapped in ``` ... ``` (no language tag) should also parse."""
+    payload = {"key": "value"}
+    fenced = f"```\n{json.dumps(payload)}\n```"
+    client._client.post = AsyncMock(
+        return_value=_make_chat_response(fenced)
+    )
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 4096
+        result = await client.chat_json(system="sys", user="usr")
+
+    assert result == payload
+
+
+async def test_chat_json_raises_on_invalid_content(client: OllamaClient):
+    """Truly invalid (non-JSON, non-fenced) content raises ValueError."""
+    client._client.post = AsyncMock(
+        return_value=_make_chat_response("this is not json at all")
+    )
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 4096
+        with pytest.raises(ValueError, match="Invalid JSON from Ollama"):
+            await client.chat_json(system="sys", user="usr")
+
+
+async def test_chat_json_passes_num_ctx(client: OllamaClient):
+    """The payload sent to Ollama includes num_ctx in options."""
+    payload = {"ok": True}
+    client._client.post = AsyncMock(
+        return_value=_make_chat_response(json.dumps(payload))
+    )
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 8192
+        await client.chat_json(system="sys", user="usr")
+
+    sent_payload = client._client.post.call_args[1]["json"]
+    assert sent_payload["options"]["num_ctx"] == 8192

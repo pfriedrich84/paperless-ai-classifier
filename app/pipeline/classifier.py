@@ -33,6 +33,16 @@ def _truncate(text: str, limit: int) -> str:
     return text[:limit] + "\n...[abgeschnitten]"
 
 
+def _estimate_tokens(text: str) -> int:
+    """Rough chars-to-tokens estimate (~3.5 chars/token for multilingual)."""
+    return max(1, len(text) * 10 // 35)
+
+
+def _tokens_to_chars(tokens: int) -> int:
+    """Convert a token budget back to approximate character count."""
+    return tokens * 35 // 10
+
+
 def _format_document_block(doc: PaperlessDocument, max_chars: int) -> str:
     return (
         f"--- Dokument #{doc.id} ---\n"
@@ -100,32 +110,21 @@ def build_user_prompt(
     doctypes: list[PaperlessEntity],
     storage_paths: list[PaperlessEntity],
     tags: list[PaperlessEntity],
+    *,
+    num_ctx: int = 8192,
+    system_prompt_chars: int = 0,
 ) -> str:
-    max_chars = settings.max_doc_chars
+    # --- Fixed sections (entity lists + task instructions) ---
+    entity_lines: list[str] = [
+        "# Verfuegbare Entitaeten in Paperless",
+        _format_entity_list("Korrespondenten", correspondents),
+        _format_entity_list("Dokumenttypen", doctypes),
+        _format_entity_list("Speicherpfade", storage_paths),
+        _format_entity_list("Tags", tags),
+    ]
+    entity_section = "\n".join(entity_lines)
 
-    sections: list[str] = []
-
-    sections.append("# Verfuegbare Entitaeten in Paperless")
-    sections.append(_format_entity_list("Korrespondenten", correspondents))
-    sections.append(_format_entity_list("Dokumenttypen", doctypes))
-    sections.append(_format_entity_list("Speicherpfade", storage_paths))
-    sections.append(_format_entity_list("Tags", tags))
-
-    if context_docs:
-        sections.append(
-            f"\n# Kontext: {len(context_docs)} aehnliche bereits klassifizierte Dokumente"
-        )
-        for c in context_docs:
-            sections.append(
-                _format_context_block(
-                    c, max_chars // 2, correspondents, doctypes, storage_paths, tags
-                )
-            )
-
-    sections.append("\n# Zu klassifizierendes Dokument")
-    sections.append(_format_document_block(target, max_chars))
-
-    sections.append(
+    task_section = (
         "\n# Aufgabe\n"
         "Gib ein JSON-Objekt mit folgenden Feldern zurueck:\n"
         "- title (string)\n"
@@ -137,6 +136,63 @@ def build_user_prompt(
         "- confidence (0-100, Gesamtvertrauen)\n"
         "- reasoning (kurze Begruendung in 1-3 Saetzen)\n"
     )
+
+    # --- Token budget computation ---
+    RESPONSE_RESERVE = 512  # tokens reserved for the model's output
+    MIN_CONTEXT_DOC_TOKENS = 100
+
+    system_tokens = _estimate_tokens("x" * system_prompt_chars) if system_prompt_chars else 0
+    fixed_tokens = _estimate_tokens(entity_section) + _estimate_tokens(task_section) + 50
+    doc_budget_tokens = num_ctx - RESPONSE_RESERVE - system_tokens - fixed_tokens
+
+    if doc_budget_tokens < 200:
+        log.warning("very tight token budget", budget=doc_budget_tokens, num_ctx=num_ctx)
+        doc_budget_tokens = 200
+
+    # Split: target gets 60%, context docs share 40% (target gets all if no context)
+    active_context = list(context_docs)
+    if active_context:
+        target_budget_tokens = int(doc_budget_tokens * 0.6)
+        context_budget_tokens = doc_budget_tokens - target_budget_tokens
+
+        # Drop least-similar context docs if per-doc budget is too small
+        while active_context:
+            per_doc = context_budget_tokens // len(active_context)
+            if per_doc >= MIN_CONTEXT_DOC_TOKENS:
+                break
+            active_context.pop()  # drop least-similar (last) doc
+
+        if not active_context:
+            # All context dropped — target gets the full budget
+            target_budget_tokens = doc_budget_tokens
+    else:
+        target_budget_tokens = doc_budget_tokens
+        context_budget_tokens = 0
+
+    target_chars = min(_tokens_to_chars(target_budget_tokens), settings.max_doc_chars)
+    context_chars_per_doc = (
+        _tokens_to_chars(context_budget_tokens // len(active_context))
+        if active_context
+        else 0
+    )
+
+    # --- Assemble prompt ---
+    sections: list[str] = [entity_section]
+
+    if active_context:
+        sections.append(
+            f"\n# Kontext: {len(active_context)} aehnliche bereits klassifizierte Dokumente"
+        )
+        for c in active_context:
+            sections.append(
+                _format_context_block(
+                    c, context_chars_per_doc, correspondents, doctypes, storage_paths, tags
+                )
+            )
+
+    sections.append("\n# Zu klassifizierendes Dokument")
+    sections.append(_format_document_block(target, target_chars))
+    sections.append(task_section)
 
     return "\n".join(sections)
 
@@ -152,13 +208,24 @@ async def classify(
 ) -> tuple[ClassificationResult, str]:
     """Call the LLM and return (parsed result, raw JSON string)."""
     system = _load_system_prompt()
-    user = build_user_prompt(target, context_docs, correspondents, doctypes, storage_paths, tags)
+    user = build_user_prompt(
+        target,
+        context_docs,
+        correspondents,
+        doctypes,
+        storage_paths,
+        tags,
+        num_ctx=settings.ollama_num_ctx,
+        system_prompt_chars=len(system),
+    )
 
     log.info(
         "calling ollama",
         doc_id=target.id,
         context_docs=len(context_docs),
         model=ollama.model,
+        prompt_chars=len(user),
+        estimated_tokens=_estimate_tokens(system) + _estimate_tokens(user),
     )
 
     raw = await ollama.chat_json(system=system, user=user)

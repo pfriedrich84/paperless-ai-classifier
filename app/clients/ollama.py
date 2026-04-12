@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import re
 from typing import Any
 
 import httpx
@@ -13,6 +14,14 @@ import structlog
 from app.config import settings
 
 log = structlog.get_logger(__name__)
+
+_MD_JSON_RE = re.compile(r"^\s*```(?:json)?\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)
+
+
+def _strip_markdown_fences(text: str) -> str:
+    """Remove markdown code fences wrapping JSON, if present."""
+    m = _MD_JSON_RE.match(text)
+    return m.group(1).strip() if m else text
 
 
 class OllamaClient:
@@ -66,7 +75,7 @@ class OllamaClient:
             "model": model or self.model,
             "format": "json",
             "stream": False,
-            "options": {"temperature": temperature},
+            "options": {"temperature": temperature, "num_ctx": settings.ollama_num_ctx},
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -80,9 +89,16 @@ class OllamaClient:
             raise ValueError("Ollama returned empty content")
         try:
             return json.loads(content)
-        except json.JSONDecodeError as exc:
+        except json.JSONDecodeError:
+            # Some models wrap JSON in markdown fences despite format="json"
+            stripped = _strip_markdown_fences(content)
+            if stripped != content:
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError:
+                    pass
             log.error("ollama returned invalid json", content=content[:500])
-            raise ValueError(f"Invalid JSON from Ollama: {exc}") from exc
+            raise ValueError(f"Invalid JSON from Ollama: {content[:200]}") from None
 
     # ---------------------------------------------------------------
     # Embeddings

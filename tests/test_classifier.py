@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.models import PaperlessDocument, PaperlessEntity
 from app.pipeline.classifier import (
+    _estimate_tokens,
     _format_context_block,
     _format_document_block,
     _resolve_entity_name,
@@ -193,3 +194,114 @@ class TestBuildUserPrompt:
         )
         assert "aehnliche bereits klassifizierte Dokumente" not in prompt
         assert "# Zu klassifizierendes Dokument" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Token budget — build_user_prompt respects num_ctx
+# ---------------------------------------------------------------------------
+class TestPromptBudget:
+    def _make_long_doc(self, doc_id: int = 1, content_len: int = 20000) -> PaperlessDocument:
+        return PaperlessDocument(
+            id=doc_id,
+            title="Long Doc",
+            content="x" * content_len,
+        )
+
+    def _make_context_docs(self, count: int, content_len: int = 5000) -> list[PaperlessDocument]:
+        return [
+            PaperlessDocument(
+                id=100 + i,
+                title=f"Context {i}",
+                content="y" * content_len,
+                correspondent=1,
+                document_type=10,
+                tags=[20],
+            )
+            for i in range(count)
+        ]
+
+    def test_respects_token_budget(
+        self,
+        sample_correspondents: list[PaperlessEntity],
+        sample_doctypes: list[PaperlessEntity],
+        sample_storage_paths: list[PaperlessEntity],
+        sample_tags: list[PaperlessEntity],
+    ):
+        """With num_ctx=4096 and a large doc, prompt stays within budget."""
+        target = self._make_long_doc(content_len=20000)
+        context = self._make_context_docs(5, content_len=5000)
+        system_chars = 3500  # approximate system prompt size
+
+        prompt = build_user_prompt(
+            target=target,
+            context_docs=context,
+            correspondents=sample_correspondents,
+            doctypes=sample_doctypes,
+            storage_paths=sample_storage_paths,
+            tags=sample_tags,
+            num_ctx=4096,
+            system_prompt_chars=system_chars,
+        )
+        total_tokens = _estimate_tokens(prompt) + _estimate_tokens("x" * system_chars)
+        # Total should fit within num_ctx (with some margin for response)
+        assert total_tokens < 4096
+
+    def test_drops_context_when_tight(
+        self,
+        sample_correspondents: list[PaperlessEntity],
+        sample_doctypes: list[PaperlessEntity],
+        sample_storage_paths: list[PaperlessEntity],
+        sample_tags: list[PaperlessEntity],
+    ):
+        """With a very small num_ctx, context docs get dropped."""
+        target = self._make_long_doc(content_len=5000)
+        context = self._make_context_docs(5, content_len=5000)
+
+        prompt = build_user_prompt(
+            target=target,
+            context_docs=context,
+            correspondents=sample_correspondents,
+            doctypes=sample_doctypes,
+            storage_paths=sample_storage_paths,
+            tags=sample_tags,
+            num_ctx=2048,
+            system_prompt_chars=3500,
+        )
+        # With such a tight budget, not all 5 context docs can fit
+        context_count = prompt.count("--- Dokument #10")
+        assert context_count < 5
+
+    def test_no_context_target_gets_full_budget(
+        self,
+        sample_correspondents: list[PaperlessEntity],
+        sample_doctypes: list[PaperlessEntity],
+        sample_storage_paths: list[PaperlessEntity],
+        sample_tags: list[PaperlessEntity],
+    ):
+        """Without context docs, target document gets the full document budget."""
+        target = self._make_long_doc(content_len=20000)
+
+        prompt_no_ctx = build_user_prompt(
+            target=target,
+            context_docs=[],
+            correspondents=sample_correspondents,
+            doctypes=sample_doctypes,
+            storage_paths=sample_storage_paths,
+            tags=sample_tags,
+            num_ctx=4096,
+            system_prompt_chars=3500,
+        )
+        prompt_with_ctx = build_user_prompt(
+            target=target,
+            context_docs=self._make_context_docs(1, content_len=100),
+            correspondents=sample_correspondents,
+            doctypes=sample_doctypes,
+            storage_paths=sample_storage_paths,
+            tags=sample_tags,
+            num_ctx=4096,
+            system_prompt_chars=3500,
+        )
+        # Target section should be larger without context (gets 100% vs 60% of budget)
+        target_no_ctx = prompt_no_ctx.split("# Zu klassifizierendes Dokument")[1]
+        target_with_ctx = prompt_with_ctx.split("# Zu klassifizierendes Dokument")[1]
+        assert len(target_no_ctx) > len(target_with_ctx)
