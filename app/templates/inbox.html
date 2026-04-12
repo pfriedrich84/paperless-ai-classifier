@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Inbox — Paperless AI{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Inbox</h1>
+    <p class="mt-1 text-sm text-gray-500">{{ items|length }} document{{ 's' if items|length != 1 else '' }} with Posteingang tag</p>
+</div>
+
+{% if items %}
+<div class="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">ID</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Title</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Added</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for item in items %}
+            <tr id="doc-{{ item.id }}" class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">#{{ item.id }}</td>
+                <td class="px-4 py-3 text-sm text-gray-800">{{ item.title or '—' }}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{ item.created_date or '—' }}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{ item.added[:16] if item.added else '—' }}</td>
+                <td class="px-4 py-3 text-center">
+                    {% set status = item.status %}
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                        {{ 'bg-gray-100 text-gray-700' if status == 'unprocessed' else
+                           ('bg-amber-100 text-amber-800' if status == 'pending' else
+                           ('bg-green-100 text-green-800' if status in ('committed', 'accepted') else
+                           'bg-red-100 text-red-800')) }}">
+                        {{ status }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-right">
+                    <button hx-post="/inbox/{{ item.id }}/reprocess"
+                            hx-target="#doc-{{ item.id }}"
+                            hx-swap="outerHTML"
+                            hx-indicator="#spinner-{{ item.id }}"
+                            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg
+                                   bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors">
+                        <svg id="spinner-{{ item.id }}" class="htmx-indicator animate-spin -ml-0.5 mr-1.5 h-3 w-3" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        Reprocess
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-16">
+    <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+    </svg>
+    <h3 class="mt-4 text-lg font-medium text-gray-900">Inbox empty</h3>
+    <p class="mt-1 text-sm text-gray-500">No documents with the Posteingang tag found.</p>
+</div>
+{% endif %}
+{% endblock %}

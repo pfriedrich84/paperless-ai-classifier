@@ -35,7 +35,7 @@
                     Paperless AI
                 </a>
                 <div class="hidden md:flex space-x-1">
-                    {% set nav = {"/": "Dashboard", "/review": "Review", "/tags": "Tags", "/errors": "Errors", "/stats": "Stats", "/settings": "Settings"} %}
+                    {% set nav = {"/": "Dashboard", "/inbox": "Inbox", "/review": "Review", "/tags": "Tags", "/errors": "Errors", "/stats": "Stats", "/settings": "Settings"} %}
                     {% for href, label in nav.items() %}
                     <a href="{{ href }}"
                        class="px-3 py-2 rounded-md text-sm font-medium

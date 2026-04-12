@@ -23,10 +23,14 @@ def _serialize_embedding(vec: list[float]) -> bytes:
 
 
 def _document_summary(doc: PaperlessDocument) -> str:
-    """Short, embedding-friendly text representation of a document."""
+    """Short, embedding-friendly text representation of a document.
+
+    Limit content to 1000 chars to stay within the embedding model's context
+    window (nomic-embed-text-v2-moe) and avoid costly truncation retries.
+    """
     parts = [doc.title or ""]
     if doc.content:
-        parts.append(doc.content[:2000])
+        parts.append(doc.content[:1000])
     return "\n".join(p for p in parts if p)
 
 

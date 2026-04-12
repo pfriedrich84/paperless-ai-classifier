@@ -198,16 +198,17 @@ async def _process_document(
     """Run the full classification pipeline for a single document."""
     doc_id = doc.id
 
-    # Idempotency: skip if already processed at this version
+    # Idempotency: skip if already successfully processed at this version.
+    # Documents that previously failed ('error') are retried.
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT last_updated_at FROM processed_documents WHERE document_id = ?",
+            "SELECT last_updated_at, status FROM processed_documents WHERE document_id = ?",
             (doc_id,),
         ).fetchone()
     if row:
         stored_ts = row["last_updated_at"]
         doc_ts = (doc.modified or datetime.now(tz=UTC)).isoformat()
-        if stored_ts == doc_ts:
+        if stored_ts == doc_ts and row["status"] != "error":
             log.debug("document already processed", doc_id=doc_id)
             return
 

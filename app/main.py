@@ -230,10 +230,11 @@ async def healthz():
 # ---------------------------------------------------------------------------
 # Routes (imported after app creation to avoid circular imports)
 # ---------------------------------------------------------------------------
-from app.routes import errors, index, ocr, review, stats, tags, webhook  # noqa: E402
+from app.routes import errors, inbox, index, ocr, review, stats, tags, webhook  # noqa: E402
 from app.routes import settings as settings_routes  # noqa: E402
 
 app.include_router(index.router)
+app.include_router(inbox.router)
 app.include_router(review.router)
 app.include_router(tags.router)
 app.include_router(ocr.router)
