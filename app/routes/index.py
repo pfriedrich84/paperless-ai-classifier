@@ -15,7 +15,7 @@ router = APIRouter()
 async def dashboard(request: Request):
     with get_conn() as conn:
         pending = conn.execute(
-            "SELECT COUNT(*) AS c FROM suggestions WHERE status = 'pending'"
+            "SELECT COUNT(DISTINCT document_id) AS c FROM suggestions WHERE status = 'pending'"
         ).fetchone()["c"]
 
         committed_today = conn.execute(

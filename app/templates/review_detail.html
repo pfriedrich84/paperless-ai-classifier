@@ -10,6 +10,16 @@
             </svg>
         </a>
         <h1 class="text-xl sm:text-2xl font-bold text-gray-900">Review #{{ s.document_id }}</h1>
+        <a href="{{ paperless_url }}/documents/{{ s.document_id }}/details"
+           target="_blank" rel="noopener"
+           class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-lg
+                  bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+           title="Open in Paperless-NGX">
+            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+            Paperless
+        </a>
         {% set conf = s.confidence or 0 %}
         <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
                      {{ 'bg-green-100 text-green-800' if conf >= 80 else ('bg-amber-100 text-amber-800' if conf >= 50 else 'bg-red-100 text-red-800') }}">
@@ -37,19 +47,19 @@
             </div>
             <div>
                 <dt class="text-xs font-medium text-gray-400 uppercase">Correspondent</dt>
-                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_correspondent or '—' }}</dd>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ original_correspondent_name or '—' }}</dd>
             </div>
             <div>
                 <dt class="text-xs font-medium text-gray-400 uppercase">Document Type</dt>
-                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_doctype or '—' }}</dd>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ original_doctype_name or '—' }}</dd>
             </div>
             <div>
                 <dt class="text-xs font-medium text-gray-400 uppercase">Storage Path</dt>
-                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_storage_path or '—' }}</dd>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ original_storage_path_name or '—' }}</dd>
             </div>
             <div>
                 <dt class="text-xs font-medium text-gray-400 uppercase">Tags</dt>
-                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_tags_json or '—' }}</dd>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ original_tag_names | join(', ') or '—' }}</dd>
             </div>
         </dl>
     </div>
