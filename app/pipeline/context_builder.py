@@ -83,19 +83,24 @@ async def find_similar_documents(
     blob = _serialize_embedding(vec)
     inbox_tag_id = settings.paperless_inbox_tag_id
 
-    # Overfetch 2x to compensate for inbox docs that will be filtered out
+    # Overfetch to compensate for inbox docs + self that will be filtered out.
+    # sqlite-vec vec0 requires `k = ?` in WHERE for KNN queries;
+    # LIMIT alone is insufficient when other constraints are present.
+    k = limit * 2 + 1
     with get_conn() as conn:
         rows = conn.execute(
             """
             SELECT document_id
               FROM doc_embeddings
              WHERE embedding MATCH ?
-               AND document_id != ?
+               AND k = ?
              ORDER BY distance
-             LIMIT ?
             """,
-            (blob, doc.id, limit * 2),
+            (blob, k),
         ).fetchall()
+
+    # Exclude the source document (vec0 KNN cannot filter by document_id)
+    rows = [r for r in rows if r["document_id"] != doc.id]
 
     if not rows:
         return []
