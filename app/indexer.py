@@ -34,6 +34,7 @@ async def initial_index(
         "documents to index", total=len(docs), already_indexed=len(indexed_ids), new=len(new_docs)
     )
 
+    ollama.embed_retry_count = 0
     count = 0
     for i, doc in enumerate(new_docs, 1):
         try:
@@ -44,7 +45,12 @@ async def initial_index(
         except Exception as exc:
             log.warning("failed to index document", doc_id=doc.id, error=str(exc))
 
-    log.info("initial index complete", indexed=count)
+    log.info(
+        "initial index complete",
+        indexed=count,
+        skipped=len(new_docs) - count,
+        embed_retries=ollama.embed_retry_count,
+    )
     return count
 
 

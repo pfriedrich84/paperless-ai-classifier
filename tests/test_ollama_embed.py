@@ -1,0 +1,192 @@
+"""Tests for OllamaClient.embed() retry and truncation logic."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, patch
+
+import httpx
+import pytest
+
+from app.clients.ollama import OllamaClient
+
+
+def _make_response(status_code: int, json_body: dict | None = None, text: str = "") -> httpx.Response:
+    """Build a minimal httpx.Response for testing."""
+    r = httpx.Response(
+        status_code=status_code,
+        json=json_body,
+        request=httpx.Request("POST", "http://test/api/embeddings"),
+    )
+    if text:
+        r._content = text.encode()
+    return r
+
+
+@pytest.fixture()
+def client() -> OllamaClient:
+    c = OllamaClient.__new__(OllamaClient)
+    c.base_url = "http://test:11434"
+    c.model = "test-model"
+    c.embed_model = "test-embed"
+    c._client = AsyncMock()
+    c.embed_retry_count = 0
+    return c
+
+
+async def test_embed_succeeds_without_retry(client: OllamaClient):
+    """Successful embed on first attempt — no retries needed."""
+    embedding = [0.1] * 768
+    client._client.post = AsyncMock(
+        return_value=_make_response(200, {"embedding": embedding})
+    )
+
+    result = await client.embed("hello world")
+
+    assert result == embedding
+    assert client.embed_retry_count == 0
+    assert client._client.post.call_count == 1
+
+
+async def test_embed_retries_on_transient_500_then_succeeds(client: OllamaClient):
+    """Transient 500 (not context-length) triggers backoff retry."""
+    embedding = [0.1] * 768
+    client._client.post = AsyncMock(
+        side_effect=[
+            _make_response(500, text='{"error": "internal error"}'),
+            _make_response(200, {"embedding": embedding}),
+        ]
+    )
+
+    with patch("app.clients.ollama.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        result = await client.embed("hello world")
+
+    assert result == embedding
+    assert client.embed_retry_count == 1
+    assert client._client.post.call_count == 2
+    mock_sleep.assert_called_once()
+
+
+async def test_embed_retries_exhausted_raises(client: OllamaClient):
+    """All retries exhausted — raises the last HTTPStatusError."""
+    client._client.post = AsyncMock(
+        return_value=_make_response(500, text='{"error": "internal error"}')
+    )
+
+    with (
+        patch("app.clients.ollama.asyncio.sleep", new_callable=AsyncMock),
+        patch("app.clients.ollama.settings") as mock_settings,
+    ):
+        mock_settings.ollama_embed_retries = 2
+        mock_settings.ollama_embed_retry_base_delay = 0.01
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.embed("hello world")
+
+    # 1 initial + 2 retries = 3 attempts, 2 retries counted
+    assert client.embed_retry_count == 2
+    assert client._client.post.call_count == 3
+
+
+async def test_embed_no_retry_on_4xx(client: OllamaClient):
+    """4xx client error (not 429) raises immediately without retry."""
+    client._client.post = AsyncMock(
+        return_value=_make_response(400, text='{"error": "bad request"}')
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.embed("hello world")
+
+    assert client.embed_retry_count == 0
+    assert client._client.post.call_count == 1
+
+
+async def test_embed_retries_on_429(client: OllamaClient):
+    """429 rate limit triggers retry."""
+    embedding = [0.1] * 768
+    client._client.post = AsyncMock(
+        side_effect=[
+            _make_response(429, text="rate limited"),
+            _make_response(200, {"embedding": embedding}),
+        ]
+    )
+
+    with patch("app.clients.ollama.asyncio.sleep", new_callable=AsyncMock):
+        result = await client.embed("hello world")
+
+    assert result == embedding
+    assert client.embed_retry_count == 1
+
+
+async def test_embed_retries_on_connect_error(client: OllamaClient):
+    """ConnectError triggers retry."""
+    embedding = [0.1] * 768
+    client._client.post = AsyncMock(
+        side_effect=[
+            httpx.ConnectError("connection refused"),
+            _make_response(200, {"embedding": embedding}),
+        ]
+    )
+
+    with patch("app.clients.ollama.asyncio.sleep", new_callable=AsyncMock):
+        result = await client.embed("hello world")
+
+    assert result == embedding
+    assert client.embed_retry_count == 1
+
+
+async def test_embed_context_length_error_truncates_and_retries(client: OllamaClient):
+    """Context-length 500 triggers text truncation (no backoff) and retries."""
+    long_text = "a" * 2000
+    embedding = [0.1] * 768
+
+    client._client.post = AsyncMock(
+        side_effect=[
+            _make_response(500, text='{"error": "the input length exceeds the context length"}'),
+            _make_response(200, {"embedding": embedding}),
+        ]
+    )
+
+    result = await client.embed(long_text)
+
+    assert result == embedding
+    assert client.embed_retry_count == 1
+    # Second call should have truncated prompt (75% of original)
+    second_call_payload = client._client.post.call_args_list[1][1]["json"]
+    assert len(second_call_payload["prompt"]) == int(len(long_text) * 0.75)
+
+
+async def test_embed_context_length_progressive_truncation(client: OllamaClient):
+    """Multiple context-length errors cause progressive truncation."""
+    long_text = "a" * 2000
+    embedding = [0.1] * 768
+
+    client._client.post = AsyncMock(
+        side_effect=[
+            _make_response(500, text='{"error": "the input length exceeds the context length"}'),
+            _make_response(500, text='{"error": "the input length exceeds the context length"}'),
+            _make_response(200, {"embedding": embedding}),
+        ]
+    )
+
+    result = await client.embed(long_text)
+
+    assert result == embedding
+    assert client.embed_retry_count == 2
+    # Third call: 2000 * 0.75 * 0.75 = 1125
+    third_call_payload = client._client.post.call_args_list[2][1]["json"]
+    assert len(third_call_payload["prompt"]) == int(int(2000 * 0.75) * 0.75)
+
+
+async def test_embed_retry_disabled_when_zero(client: OllamaClient):
+    """With retries=0, errors raise immediately."""
+    client._client.post = AsyncMock(
+        return_value=_make_response(500, text='{"error": "internal error"}')
+    )
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_embed_retries = 0
+        mock_settings.ollama_embed_retry_base_delay = 1.0
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.embed("hello world")
+
+    assert client.embed_retry_count == 0
+    assert client._client.post.call_count == 1

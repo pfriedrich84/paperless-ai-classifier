@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma3:4b"
     ollama_embed_model: str = "nomic-embed-text-v2-moe"
     ollama_timeout_seconds: int = 300
+    ollama_embed_retries: int = 3
+    ollama_embed_retry_base_delay: float = 1.0
 
     # --- Worker ---
     poll_interval_seconds: int = 300

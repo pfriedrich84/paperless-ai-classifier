@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import random
 from typing import Any
 
 import httpx
@@ -22,6 +24,7 @@ class OllamaClient:
             base_url=self.base_url,
             timeout=httpx.Timeout(settings.ollama_timeout_seconds),
         )
+        self.embed_retry_count: int = 0
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -84,12 +87,75 @@ class OllamaClient:
     # ---------------------------------------------------------------
     # Embeddings
     # ---------------------------------------------------------------
+    @staticmethod
+    def _is_context_length_error(response: httpx.Response) -> bool:
+        """Check if a 500 response is caused by input exceeding the context length."""
+        try:
+            body = response.text
+            return "context length" in body.lower()
+        except Exception:
+            return False
+
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        if isinstance(exc, httpx.HTTPStatusError):
+            code = exc.response.status_code
+            return code == 429 or code >= 500
+        return isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout))
+
     async def embed(self, text: str) -> list[float]:
-        payload = {"model": self.embed_model, "prompt": text}
-        r = await self._client.post("/api/embeddings", json=payload)
-        r.raise_for_status()
-        data = r.json()
-        vec = data.get("embedding")
-        if not vec:
-            raise ValueError("Ollama returned empty embedding")
-        return vec
+        max_retries = settings.ollama_embed_retries
+        base_delay = settings.ollama_embed_retry_base_delay
+        prompt = text
+        last_exc: Exception | None = None
+
+        for attempt in range(1 + max_retries):
+            payload = {"model": self.embed_model, "prompt": prompt}
+            try:
+                r = await self._client.post("/api/embeddings", json=payload)
+                r.raise_for_status()
+                data = r.json()
+                vec = data.get("embedding")
+                if not vec:
+                    raise ValueError("Ollama returned empty embedding")
+                return vec
+            except httpx.HTTPStatusError as exc:
+                last_exc = exc
+                if attempt < max_retries and self._is_context_length_error(exc.response):
+                    # Input too long — truncate by 25% and retry immediately
+                    prompt = prompt[: int(len(prompt) * 0.75)]
+                    self.embed_retry_count += 1
+                    log.warning(
+                        "embedding input exceeds context length, truncating",
+                        attempt=attempt + 1,
+                        new_len=len(prompt),
+                    )
+                    continue
+                if attempt < max_retries and self._is_retryable(exc):
+                    delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
+                    self.embed_retry_count += 1
+                    log.warning(
+                        "embedding request failed, retrying",
+                        attempt=attempt + 1,
+                        delay_s=round(delay, 2),
+                        status=exc.response.status_code,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_retries and self._is_retryable(exc):
+                    delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
+                    self.embed_retry_count += 1
+                    log.warning(
+                        "embedding request failed, retrying",
+                        attempt=attempt + 1,
+                        delay_s=round(delay, 2),
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise
+
+        raise last_exc  # type: ignore[misc]
