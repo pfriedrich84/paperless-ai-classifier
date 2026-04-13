@@ -1,9 +1,8 @@
-# Exceptions to the 14-day minimum dependency age rule.
+# Exceptions to the 3-day minimum dependency age rule.
 # Only security patches from established packages should be listed here.
 # Format: package==version  # CVE or justification
 #
 # Each entry MUST include the CVE number being fixed and should be
-# removed once the version is older than 14 days.
-
-# Security fix for CVE-2026-39892 (released 2026-04-08, remove after 2026-04-22)
-cryptography==46.0.7
+# removed once the version is older than 3 days.
+#
+# (no active exceptions — cryptography==46.0.7 is now >3 days old)

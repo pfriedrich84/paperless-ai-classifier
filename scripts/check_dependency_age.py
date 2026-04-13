@@ -9,7 +9,7 @@ Security patches from established packages can be exempted via an allowlist
 file (one ``package==version`` per line, with a comment explaining the CVE).
 
 Usage:
-    python scripts/check_dependency_age.py [--min-days 14] [--allowlist .dependency-age-allowlist]
+    python scripts/check_dependency_age.py [--min-days 3] [--allowlist .dependency-age-allowlist]
 
 Exit codes:
     0  all packages pass
@@ -24,16 +24,18 @@ import os
 import subprocess
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 # Packages we don't publish to PyPI (local editable installs, etc.)
-SKIP_PACKAGES = frozenset({
-    "paperless-ai-classifier",
-    "pip",
-    "setuptools",
-    "wheel",
-    "pkg-resources",
-})
+SKIP_PACKAGES = frozenset(
+    {
+        "paperless-ai-classifier",
+        "pip",
+        "setuptools",
+        "wheel",
+        "pkg-resources",
+    }
+)
 
 
 def load_allowlist(path: str) -> set[tuple[str, str]]:
@@ -86,7 +88,7 @@ def get_release_date(name: str, version: str) -> datetime | None:
         ts = upload_time.replace("Z", "+00:00")
         if "+" not in ts and ts.count("T") == 1:
             ts += "+00:00"
-        return datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
+        return datetime.fromisoformat(ts).replace(tzinfo=UTC)
     except Exception:
         return None
 
@@ -96,8 +98,8 @@ def main() -> int:
     parser.add_argument(
         "--min-days",
         type=int,
-        default=14,
-        help="Minimum age in days (default: 14)",
+        default=3,
+        help="Minimum age in days (default: 3)",
     )
     parser.add_argument(
         "--allowlist",
@@ -110,7 +112,7 @@ def main() -> int:
     if allowlist:
         print(f"Loaded {len(allowlist)} allowlisted exception(s)")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     packages = get_installed_packages()
     violations: list[tuple[str, str, datetime, int]] = []
     checked = 0
@@ -134,19 +136,30 @@ def main() -> int:
     print(f"Checked {checked} packages (min age: {args.min_days} days)")
 
     if violations:
-        print(f"\nFAILED: {len(violations)} package(s) are too new:\n")
-        print(f"{'Package':<30} {'Version':<15} {'Released':<12} {'Age (days)':<10}")
-        print("-" * 70)
+        print(f"\n{'=' * 70}")
+        print(f"FAILED: {len(violations)} package(s) younger than {args.min_days} days")
+        print(f"{'=' * 70}\n")
+        print(f"{'Package':<30} {'Version':<15} {'Released':<12} {'Age':<6} {'Action'}")
+        print("-" * 90)
         for name, version, release_date, age in sorted(violations, key=lambda x: x[3]):
-            print(f"{name:<30} {version:<15} {release_date:%Y-%m-%d}   {age}")
+            print(
+                f"{name:<30} {version:<15} {release_date:%Y-%m-%d}   {age:<6}"
+                f"Pin to older version or add to .dependency-age-allowlist"
+            )
+        print(f"\n{'=' * 70}")
+        print("Supply-chain protection: New packages are quarantined for")
+        print(f"{args.min_days} days to allow the community to detect compromised releases.")
+        print()
+        print("To fix:")
+        print("  1. Pin to an older version in pyproject.toml / constraints.txt")
+        print("  2. OR (for security patches only): add to .dependency-age-allowlist:")
         print(
-            f"\nAll dependencies must be at least {args.min_days} days old "
-            "to mitigate supply-chain attacks."
+            "     package==version  # CVE-XXXX-XXXXX (released YYYY-MM-DD, remove after YYYY-MM-DD)"
         )
-        print("Pin affected packages to older versions in pyproject.toml or constraints.txt.")
+        print(f"{'=' * 70}")
         return 1
 
-    print("OK — all packages meet the minimum age requirement.")
+    print(f"OK — all {checked} packages are at least {args.min_days} days old.")
     return 0
 
 

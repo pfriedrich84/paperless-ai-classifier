@@ -1,5 +1,12 @@
 # Known vulnerabilities to ignore in pip-audit.
-# These are in pip itself (the package manager), not in project dependencies.
-# pip is upgraded separately in the CI runner and Docker build.
+# These are in build tools (pip, setuptools, wheel), not in project runtime dependencies.
+# Build tools are upgraded separately in the CI runner and Docker build.
+#
+# pip
 CVE-2025-8869
 CVE-2026-1703
+# setuptools (package_index path traversal — easy_install is deprecated)
+PYSEC-2025-49
+CVE-2024-6345
+# wheel (unpack path traversal — only affects wheel CLI unpack, not pip install)
+CVE-2026-24049

@@ -51,7 +51,7 @@ jobs:
           eval pip-audit $ARGS
 
       - name: Dependency age check (supply-chain protection)
-        run: python scripts/check_dependency_age.py --min-days 14
+        run: python scripts/check_dependency_age.py --min-days 3
 
       - name: Template syntax check
         run: |

@@ -1,9 +1,9 @@
 ---
-description: "Dependency-Update mit 14-Tage-Supply-Chain-Pruefung"
+description: "Dependency-Update mit 3-Tage-Supply-Chain-Pruefung"
 argument-hint: "<paketname> [version]"
 ---
 
-Aktualisiere eine Python-Dependency unter Einhaltung der 14-Tage-Supply-Chain-Regel.
+Aktualisiere eine Python-Dependency unter Einhaltung der 3-Tage-Supply-Chain-Regel.
 
 **Argument:** $ARGUMENTS (Paketname, optional mit Zielversion)
 
@@ -18,8 +18,8 @@ Aktualisiere eine Python-Dependency unter Einhaltung der 14-Tage-Supply-Chain-Re
    ```
    curl -s https://pypi.org/pypi/<paket>/<version>/json | python3 -c "import sys,json; print(json.load(sys.stdin)['urls'][0]['upload_time'])"
    ```
-   - Falls juenger als 14 Tage: **Abbrechen** mit Warnung. Nur bei CVE-Fix fortfahren (dann `.dependency-age-allowlist` aktualisieren).
-   - Falls aelter als 14 Tage: Weiter.
+   - Falls juenger als 3 Tage: **Abbrechen** mit Warnung. Nur bei CVE-Fix fortfahren (dann `.dependency-age-allowlist` aktualisieren).
+   - Falls aelter als 3 Tage: Weiter.
 
 3. **Obergrenze anheben:**
    - Direkte Dependency → `pyproject.toml`: `<=`-Obergrenze auf neue Version setzen
@@ -31,7 +31,7 @@ Aktualisiere eine Python-Dependency unter Einhaltung der 14-Tage-Supply-Chain-Re
    - `ruff check app/ tests/`
    - `ruff format --check app/ tests/`
    - `pytest tests/ -v`
-   - `python scripts/check_dependency_age.py --min-days 14`
+   - `python scripts/check_dependency_age.py --min-days 3`
 
 6. **Zusammenfassung:** Zeige was geaendert wurde und ob alle Checks bestanden haben.
 

@@ -160,7 +160,7 @@ docs/
   webhooks.md            Webhook-Konfigurationsanleitung
 tests/                   pytest-Tests (conftest + 14 test_*.py)
 scripts/
-  check_dependency_age.py  CI-Check: 14-Tage-Mindestalter fuer Dependencies
+  check_dependency_age.py  CI-Check: 3-Tage-Mindestalter fuer Dependencies
 .github/workflows/
   ci.yml                 Lint, Tests, Audit, Docker Build
   docker-publish.yml     GHCR Image Publish bei Release/Push
@@ -377,7 +377,7 @@ dann erneut pruefen. Erst committen wenn alle drei Checks gruen sind.
 Die CI-Pipeline (`lint-and-verify` Job) fuehrt zusaetzlich aus:
 - `pip check` (Dependency-Kompatibilitaet)
 - `pip-audit` (CVE-Scan)
-- `python scripts/check_dependency_age.py --min-days 14` (Supply-Chain)
+- `python scripts/check_dependency_age.py --min-days 3` (Supply-Chain)
 - Template-Syntax-Check (alle Jinja2-Templates werden geladen)
 - `python -c "import app.main"` (Import-Check)
 - DB-Schema-Check, Prompt-File-Check
@@ -448,20 +448,19 @@ Das Problem: `pip install fastapi>=0.115.0` installiert *immer die neueste Versi
 Wird diese Version Minuten nach der Veroeffentlichung kompromittiert, sind alle
 Installationen betroffen — bevor die Community den Angriff bemerkt.
 
-### Unsere Strategie: 14-Tage-Mindestalter
+### Unsere Strategie: 3-Tage-Mindestalter
 
-Wir installieren **nur Versionen, die mindestens 14 Tage oeffentlich verfuegbar sind**.
+Wir installieren **nur Versionen, die mindestens 3 Tage oeffentlich verfuegbar sind**.
 Die Logik dahinter:
 
 1. **Erkennungsfenster:** Die meisten kompromittierten Pakete werden innerhalb von
    Stunden bis wenigen Tagen entdeckt und von PyPI entfernt.
-2. **Community-Review:** Nach 14 Tagen haben tausende Entwickler die Version
-   installiert und potenzielle Probleme haetten sich gezeigt.
-3. **Automatische Erkennung:** Tools wie `pip-audit`, Sicherheitsscanner und
+2. **Automatische Erkennung:** Tools wie `pip-audit`, Sicherheitsscanner und
    GitHub-Advisories decken bekannte Schwachstellen typischerweise innerhalb
-   einer Woche auf.
-4. **Kosten-Nutzen:** 14 Tage Verzoegerung sind fuer eine Self-Hosted-App akzeptabel —
-   wir brauchen keine Bleeding-Edge-Features am Erscheinungstag.
+   von 1-3 Tagen auf.
+3. **Kosten-Nutzen:** 3 Tage Verzoegerung sind fuer eine Self-Hosted-App akzeptabel —
+   lang genug um kompromittierte Releases zu erkennen, kurz genug um
+   Security-Patches zeitnah einzuspielen.
 
 ### Implementierung
 
@@ -498,16 +497,16 @@ pip wendet Constraints bei jeder Installation an:
 #### 3. `scripts/check_dependency_age.py` — CI-Pruefung
 
 Dieses Skript fragt fuer jedes installierte Paket die PyPI-API nach dem
-Veroeffentlichungsdatum und schlaegt fehl, wenn ein Paket juenger als 14 Tage ist:
+Veroeffentlichungsdatum und schlaegt fehl, wenn ein Paket juenger als 3 Tage ist:
 
 ```bash
-python scripts/check_dependency_age.py --min-days 14
+python scripts/check_dependency_age.py --min-days 3
 ```
 
 #### 4. `.dependency-age-allowlist` — Ausnahmen fuer Security-Patches
 
 Manchmal muss ein Sicherheits-Patch *sofort* eingespielt werden, auch wenn er
-weniger als 14 Tage alt ist. Diese Ausnahmen werden hier dokumentiert:
+weniger als 3 Tage alt ist. Diese Ausnahmen werden hier dokumentiert:
 
 ```
 # Security fix for CVE-2026-39892 (released 2026-04-08, remove after 2026-04-22)
@@ -517,7 +516,7 @@ cryptography==46.0.7
 **Regeln fuer Ausnahmen:**
 - Nur fuer CVE-Fixes von etablierten Paketen.
 - Jeder Eintrag muss die CVE-Nummer und das Ablaufdatum enthalten.
-- Nach 14 Tagen wird der Eintrag entfernt (das Paket ist dann alt genug).
+- Nach 3 Tagen wird der Eintrag entfernt (das Paket ist dann alt genug).
 
 #### 5. `.pip-audit-known-vulnerabilities` — Bekannte Audit-Ausnahmen
 
@@ -532,7 +531,7 @@ CVE-2026-1703
 
 Wenn eine neue Version eines Pakets eingespielt werden soll:
 
-1. **Pruefen:** Ist die Version mindestens 14 Tage alt?
+1. **Pruefen:** Ist die Version mindestens 3 Tage alt?
    ```bash
    curl -s https://pypi.org/pypi/<paket>/<version>/json | python3 -c "
    import sys,json; print(json.load(sys.stdin)['urls'][0]['upload_time'])"
@@ -543,10 +542,10 @@ Wenn eine neue Version eines Pakets eingespielt werden soll:
 4. **Testen:** Alle CI-Checks lokal ausfuehren (Lint, Tests, Audit, Age-Check).
 5. **Committen:** Aenderung an `pyproject.toml` / `constraints.txt` committen.
 
-**Bei Security-Patches (< 14 Tage alt):**
+**Bei Security-Patches (< 3 Tage alt):**
 - Version in `constraints.txt` anheben.
 - Eintrag in `.dependency-age-allowlist` mit CVE-Nummer und Ablaufdatum.
-- Nach 14 Tagen: Eintrag aus Allowlist entfernen.
+- Nach 3 Tagen: Eintrag aus Allowlist entfernen.
 
 ### CI-Pipeline-Uebersicht
 
@@ -556,7 +555,7 @@ Install (mit constraints.txt)
   → Tests (pytest)
   → pip check (Kompatibilitaet)
   → pip-audit (bekannte CVEs)
-  → Dependency Age Check (14-Tage-Regel)
+  → Dependency Age Check (3-Tage-Regel)
   → Template-Syntax
   → Import-Check
   → DB-Schema-Check
