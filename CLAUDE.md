@@ -514,7 +514,7 @@ Install (mit constraints.txt)
 
 ## Bekannte TODOs / Ausbau
 
-- [ ] Echter sqlite-vec KNN-Index statt Full-Scan (ab ein paar tausend Dokumenten relevant)
+- [ ] sqlite-vec HNSW-Index beobachten; vec0 Flat-Scan genuegt bis ~10k Dokumente (sub-5ms bei 768-dim, SIMD-beschleunigt)
 - [ ] Re-Embedding-Job wenn das Embedding-Modell wechselt
 - [ ] Metrics-Endpoint (Prometheus)
 - [ ] Bulk-Approve in der Review-GUI

@@ -27,7 +27,6 @@ RUN pip install --upgrade pip \
         "apscheduler>=3.10.4" \
         "structlog>=24.4.0" \
         "sqlite-vec>=0.1.3,<=0.1.7" \
-        "numpy>=2.0.0,<=2.4.4" \
         "mcp[cli]>=1.20.0,<=1.26.0"
 
 # App
