@@ -12,6 +12,12 @@ from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.db import get_conn
 from app.pipeline.context_builder import index_document
+from app.pipeline.ocr_correction import (
+    cache_ocr_correction,
+    effective_ocr_mode,
+    get_cached_ocr,
+    maybe_correct_ocr,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -78,6 +84,10 @@ async def initial_index(
     count = 0
     for i, doc in enumerate(new_docs, 1):
         try:
+            # Use cached OCR-corrected text if available
+            cached = get_cached_ocr(doc.id)
+            if cached:
+                doc = doc.model_copy(update={"content": cached})
             await index_document(doc, ollama)
             count += 1
         except Exception as exc:
@@ -119,6 +129,34 @@ async def reindex_all(
             conn.execute("DELETE FROM doc_embedding_meta")
             conn.execute("DELETE FROM doc_embeddings")
 
+        # --- Phase 0: OCR correction (before embedding) ---
+        ocr_mode = effective_ocr_mode()
+        if ocr_mode != "off":
+            log.info("reindex phase ocr — correcting documents", mode=ocr_mode)
+            docs = await paperless.list_all_documents()
+            corrected = 0
+            for doc in docs:
+                if get_cached_ocr(doc.id) is not None:
+                    continue  # already cached from a previous run
+                try:
+                    text, num = await maybe_correct_ocr(doc, ollama, paperless)
+                    if num > 0 or ocr_mode.startswith("vision"):
+                        cache_ocr_correction(doc.id, text, ocr_mode, num)
+                        corrected += 1
+                except Exception as exc:
+                    log.warning("reindex ocr failed", doc_id=doc.id, error=str(exc))
+            log.info("reindex phase ocr complete", corrected=corrected, total=len(docs))
+
+            # Unload OCR/vision model before embedding phase
+            if ocr_mode == "text":
+                await ollama.unload_model(ollama.ocr_model)
+            else:
+                from app.config import settings
+
+                vision_model = settings.ocr_vision_model or ollama.model
+                await ollama.unload_model(vision_model)
+
+        # --- Phase 1: Embedding (uses cached OCR text if available) ---
         result = await initial_index(paperless, ollama)
         _reindex_progress.finished_at = datetime.now(tz=UTC).isoformat()
         return result
