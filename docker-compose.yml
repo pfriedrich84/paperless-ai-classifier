@@ -1,6 +1,6 @@
 services:
   paperless-ai-classifier:
-    image: ghcr.io/pfriedrich84/paperless-ai-classifier:latest
+    image: ghcr.io/pfriedrich84/paperless-ai-classifier:${IMAGE_TAG:-latest}
     container_name: paperless-ai-classifier
     restart: unless-stopped
     environment:
