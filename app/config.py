@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     """All runtime settings. Everything is driven from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=("/data/config.env", ".env"),
+        env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -86,6 +86,53 @@ class Settings(BaseSettings):
 
 # Singleton
 settings = Settings()  # type: ignore[call-arg]
+
+
+def _apply_config_env_overrides() -> None:
+    """Apply config.env overrides with highest priority.
+
+    Docker-compose injects .env values as OS environment variables, which
+    pydantic-settings prioritises over dotenv files.  This means changes
+    saved via the Settings UI (written to config.env) are lost on restart.
+
+    Fix: read config.env *after* the singleton is created and patch the
+    values in, so they effectively have the highest priority.
+    """
+    config_path = Path(settings.data_dir) / "config.env"
+    if not config_path.is_file():
+        return
+
+    for line in config_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, raw = stripped.partition("=")
+        field_name = key.strip().lower()
+        raw = raw.strip()
+
+        if field_name not in Settings.model_fields:
+            continue
+
+        default = Settings.model_fields[field_name].default
+        try:
+            if isinstance(default, bool):
+                coerced: Any = raw.lower() in ("true", "1", "yes")
+            elif isinstance(default, int):
+                coerced = int(raw)
+            elif isinstance(default, float):
+                coerced = float(raw)
+            elif default is None:
+                # Optional field (e.g. int | None)
+                coerced = None if not raw or raw.lower() == "none" else int(raw)
+            else:
+                coerced = raw
+        except (ValueError, TypeError):
+            continue
+
+        object.__setattr__(settings, field_name, coerced)
+
+
+_apply_config_env_overrides()
 
 
 def needs_setup() -> bool:
