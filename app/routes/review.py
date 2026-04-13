@@ -21,6 +21,27 @@ def _row_to_suggestion(row) -> SuggestionRow:
     return SuggestionRow(**dict(row))
 
 
+def _decision_from_proposed(suggestion: SuggestionRow) -> ReviewDecision:
+    """Build a ReviewDecision from a suggestion's proposed values (no editing)."""
+    tag_ids: list[int] = []
+    if suggestion.proposed_tags_json:
+        with contextlib.suppress(json.JSONDecodeError):
+            for t in json.loads(suggestion.proposed_tags_json):
+                tid = t.get("id")
+                if tid is not None:
+                    tag_ids.append(tid)
+    return ReviewDecision(
+        suggestion_id=suggestion.id,
+        title=suggestion.proposed_title or "",
+        date=suggestion.proposed_date,
+        correspondent_id=suggestion.proposed_correspondent_id,
+        doctype_id=suggestion.proposed_doctype_id,
+        storage_path_id=suggestion.proposed_storage_path_id,
+        tag_ids=tag_ids,
+        action="accept",
+    )
+
+
 @router.get("")
 async def review_list(request: Request):
     with get_conn() as conn:
@@ -157,7 +178,7 @@ async def accept_suggestion(
     # Return HTMX partial — empty row signals removal
     return HTMLResponse(
         f'<tr id="suggestion-{suggestion_id}" class="bg-green-50">'
-        f'<td colspan="4" class="px-4 py-3 text-green-700 text-center">'
+        f'<td colspan="5" class="px-4 py-3 text-green-700 text-center">'
         f"Committed successfully</td></tr>"
     )
 
@@ -181,7 +202,7 @@ async def reject_suggestion(request: Request, suggestion_id: int):
 
     return HTMLResponse(
         f'<tr id="suggestion-{suggestion_id}" class="bg-red-50">'
-        f'<td colspan="4" class="px-4 py-3 text-red-700 text-center">'
+        f'<td colspan="5" class="px-4 py-3 text-red-700 text-center">'
         f"Rejected</td></tr>"
     )
 
@@ -224,3 +245,122 @@ async def edit_suggestion(
         )
 
     return HTMLResponse('<div class="text-green-700 text-sm mt-2">Saved</div>')
+
+
+def _bulk_oob_fragments(sid: int, css_bg: str, css_text: str, label: str) -> str:
+    """Return OOB swap fragments for both desktop row and mobile card."""
+    desktop = (
+        f'<tr id="suggestion-{sid}" hx-swap-oob="true" class="{css_bg}">'
+        f'<td colspan="5" class="px-4 py-3 {css_text} text-center">{label}</td></tr>'
+    )
+    mobile = (
+        f'<div id="suggestion-m-{sid}" hx-swap-oob="true"'
+        f' class="{css_bg} rounded-xl border p-4">'
+        f'<p class="{css_text} text-center text-sm font-medium">{label}</p></div>'
+    )
+    return desktop + mobile
+
+
+@router.post("/bulk-approve")
+async def bulk_approve(request: Request):
+    form = await request.form()
+    raw_ids = form.getlist("suggestion_ids")
+    ids = [int(x) for x in raw_ids if str(x).isdigit()]
+
+    if not ids:
+        resp = HTMLResponse('<div id="bulk-result"></div>')
+        resp.headers["HX-Trigger"] = json.dumps(
+            {"showToast": {"message": "No suggestions selected", "type": "error"}}
+        )
+        return resp
+
+    paperless = request.app.state.paperless
+    succeeded, failed, skipped = 0, 0, 0
+    oob_parts: list[str] = []
+
+    for sid in ids:
+        with get_conn() as conn:
+            row = conn.execute("SELECT * FROM suggestions WHERE id = ?", (sid,)).fetchone()
+        if not row or row["status"] != "pending":
+            skipped += 1
+            continue
+
+        suggestion = _row_to_suggestion(row)
+        decision = _decision_from_proposed(suggestion)
+        log.info("bulk-approving suggestion", suggestion_id=sid, doc_id=suggestion.document_id)
+        await commit_suggestion(suggestion, decision, paperless)
+
+        # Re-read status — commit_suggestion swallows errors and sets status='error'
+        with get_conn() as conn:
+            updated = conn.execute("SELECT status FROM suggestions WHERE id = ?", (sid,)).fetchone()
+        final_status = updated["status"] if updated else "error"
+
+        if final_status == "committed":
+            succeeded += 1
+            oob_parts.append(_bulk_oob_fragments(sid, "bg-green-50", "text-green-700", "Committed"))
+        else:
+            failed += 1
+            oob_parts.append(_bulk_oob_fragments(sid, "bg-red-50", "text-red-700", "Error"))
+
+    parts: list[str] = []
+    if succeeded:
+        parts.append(f"{succeeded} approved")
+    if failed:
+        parts.append(f"{failed} failed")
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    toast_type = "success" if failed == 0 else "error"
+
+    resp = HTMLResponse('<div id="bulk-result"></div>' + "".join(oob_parts))
+    resp.headers["HX-Trigger"] = json.dumps(
+        {"showToast": {"message": ", ".join(parts), "type": toast_type}}
+    )
+    return resp
+
+
+@router.post("/bulk-reject")
+async def bulk_reject(request: Request):
+    form = await request.form()
+    raw_ids = form.getlist("suggestion_ids")
+    ids = [int(x) for x in raw_ids if str(x).isdigit()]
+
+    if not ids:
+        resp = HTMLResponse('<div id="bulk-result"></div>')
+        resp.headers["HX-Trigger"] = json.dumps(
+            {"showToast": {"message": "No suggestions selected", "type": "error"}}
+        )
+        return resp
+
+    rejected, skipped = 0, 0
+    oob_parts: list[str] = []
+
+    for sid in ids:
+        with get_conn() as conn:
+            row = conn.execute("SELECT * FROM suggestions WHERE id = ?", (sid,)).fetchone()
+        if not row or row["status"] != "pending":
+            skipped += 1
+            continue
+
+        log.info("bulk-rejecting suggestion", suggestion_id=sid)
+        with get_conn() as conn:
+            conn.execute("UPDATE suggestions SET status = 'rejected' WHERE id = ?", (sid,))
+            conn.execute(
+                """INSERT INTO audit_log (action, document_id, actor, details)
+                   SELECT 'reject', document_id, 'user', NULL
+                   FROM suggestions WHERE id = ?""",
+                (sid,),
+            )
+        rejected += 1
+        oob_parts.append(_bulk_oob_fragments(sid, "bg-red-50", "text-red-700", "Rejected"))
+
+    parts: list[str] = []
+    if rejected:
+        parts.append(f"{rejected} rejected")
+    if skipped:
+        parts.append(f"{skipped} skipped")
+
+    resp = HTMLResponse('<div id="bulk-result"></div>' + "".join(oob_parts))
+    resp.headers["HX-Trigger"] = json.dumps(
+        {"showToast": {"message": ", ".join(parts), "type": "success"}}
+    )
+    return resp

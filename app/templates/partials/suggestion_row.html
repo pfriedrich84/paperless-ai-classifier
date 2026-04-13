@@ -1,4 +1,9 @@
 <tr id="suggestion-{{ s.id }}" class="hover:bg-gray-50 transition-colors">
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="suggestion_ids" value="{{ s.id }}"
+               class="bulk-check rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+               {% if (s.confidence or 0) >= 80 %}checked{% endif %}>
+    </td>
     <td class="px-4 py-3">
         <div class="text-sm font-medium text-gray-900">#{{ s.document_id }}</div>
         <div class="text-xs text-gray-400">{{ s.created_at[:16] }}</div>
