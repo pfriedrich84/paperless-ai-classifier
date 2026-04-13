@@ -503,20 +503,34 @@ Veroeffentlichungsdatum und schlaegt fehl, wenn ein Paket juenger als 3 Tage ist
 python scripts/check_dependency_age.py --min-days 3
 ```
 
-#### 4. `.dependency-age-allowlist` — Ausnahmen fuer Security-Patches
-
-Manchmal muss ein Sicherheits-Patch *sofort* eingespielt werden, auch wenn er
-weniger als 3 Tage alt ist. Diese Ausnahmen werden hier dokumentiert:
+**Automatische CVE-Fix-Erkennung:** Pakete die juenger als 3 Tage sind werden
+automatisch gegen die OSV.dev-Datenbank geprueft. Wenn die Version ein bekanntes
+CVE fixt, wird sie automatisch erlaubt — ohne manuellen Allowlist-Eintrag.
+Beispiel-Ausgabe:
 
 ```
-# Security fix for CVE-2026-39892 (released 2026-04-08, remove after 2026-04-22)
-cryptography==46.0.7
+Auto-allowed 1 package(s) (CVE security fixes):
+  cryptography==46.0.7 (1d old) fixes CVE-2026-39892
 ```
 
-**Regeln fuer Ausnahmen:**
+Die automatische Erkennung kann mit `--no-auto-cve` deaktiviert werden.
+
+#### 4. `.dependency-age-allowlist` — Manuelle Ausnahmen (Fallback)
+
+Falls die automatische CVE-Erkennung einen validen Security-Fix nicht erkennt
+(z.B. weil die OSV-Datenbank noch nicht aktualisiert wurde), kann ein manueller
+Eintrag als Fallback dienen:
+
+```
+# Security fix for CVE-2026-XXXXX (released YYYY-MM-DD, remove after YYYY-MM-DD)
+package==version
+```
+
+**Regeln fuer manuelle Ausnahmen:**
 - Nur fuer CVE-Fixes von etablierten Paketen.
 - Jeder Eintrag muss die CVE-Nummer und das Ablaufdatum enthalten.
 - Nach 3 Tagen wird der Eintrag entfernt (das Paket ist dann alt genug).
+- In der Regel nicht noetig — die automatische Erkennung deckt >95% der Faelle ab.
 
 #### 5. `.pip-audit-known-vulnerabilities` — Bekannte Audit-Ausnahmen
 
