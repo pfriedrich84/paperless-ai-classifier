@@ -11,9 +11,9 @@ from fastapi.responses import HTMLResponse
 
 from app.config import FIELD_META, needs_setup, settings
 from app.db import get_conn
-from app.indexer import get_reindex_progress, start_reindex_task
+from app.indexer import cancel_reindex, get_reindex_progress, start_reindex_task
 from app.pipeline.classifier import _load_system_prompt, _prompt_override_path
-from app.worker import poll_inbox
+from app.worker import cancel_poll, get_poll_progress, start_poll_task
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/settings")
@@ -41,7 +41,8 @@ async def settings_page(request: Request):
     except Exception:
         system_prompt = "(failed to load prompt)"
     is_custom = _prompt_override_path().is_file()
-    progress = get_reindex_progress()
+    reindex_progress = get_reindex_progress()
+    poll_progress = get_poll_progress()
     return request.app.state.templates.TemplateResponse(
         request,
         "settings.html",
@@ -49,7 +50,8 @@ async def settings_page(request: Request):
             "config_groups": config_groups,
             "system_prompt": system_prompt,
             "is_custom_prompt": is_custom,
-            "reindex": progress,
+            "reindex": reindex_progress,
+            "poll": poll_progress,
             "needs_setup": needs_setup(),
         },
     )
@@ -105,17 +107,17 @@ async def save_config_route(request: Request):
 @router.post("/trigger-poll")
 async def trigger_poll(request: Request):
     log.info("manual poll triggered")
-    try:
-        await poll_inbox()
+    started = start_poll_task()
+    if not started:
+        progress = get_poll_progress()
+        if progress.running:
+            return HTMLResponse(_render_poll_progress(progress))
         return HTMLResponse(
-            '<div class="text-green-700 text-sm font-medium mt-2">Poll completed successfully</div>'
+            '<div id="poll-result">'
+            '<div class="text-amber-600 text-sm font-medium mt-2">'
+            "Cannot start poll (reindex in progress)</div></div>"
         )
-    except Exception as exc:
-        log.error("manual poll failed", error=str(exc))
-        return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">Poll failed: {exc}</div>',
-            status_code=500,
-        )
+    return HTMLResponse(_render_poll_progress(get_poll_progress()))
 
 
 @router.post("/trigger-reindex")
@@ -151,6 +153,47 @@ async def reindex_banner(request: Request):
     )
 
 
+@router.get("/poll-status")
+async def poll_status(request: Request):
+    """Return poll progress HTML for HTMX polling."""
+    return HTMLResponse(_render_poll_progress(get_poll_progress()))
+
+
+@router.get("/poll-banner")
+async def poll_banner(request: Request):
+    """Return a site-wide banner when a poll is running."""
+    progress = get_poll_progress()
+    if not progress.running:
+        return HTMLResponse("")
+    phase_labels = {
+        "prepare": "Preparing",
+        "ocr": "OCR correction",
+        "embed": "Embedding",
+        "classify": "Classifying",
+    }
+    label = phase_labels.get(progress.phase, progress.phase)
+    return HTMLResponse(
+        f'<div class="bg-blue-50 border-b border-blue-200 px-4 py-2'
+        f' text-center text-sm text-blue-800">'
+        f"Poll in progress: {label}"
+        f" ({progress.done}/{progress.total} documents)</div>"
+    )
+
+
+@router.post("/cancel-reindex")
+async def cancel_reindex_route(request: Request):
+    """Cancel the running reindex task."""
+    cancel_reindex()
+    return HTMLResponse(_render_reindex_progress(get_reindex_progress()))
+
+
+@router.post("/cancel-poll")
+async def cancel_poll_route(request: Request):
+    """Cancel the running poll task."""
+    cancel_poll()
+    return HTMLResponse(_render_poll_progress(get_poll_progress()))
+
+
 def _render_reindex_progress(progress) -> str:
     """Build an HTML fragment for the reindex progress area."""
     if progress.running:
@@ -167,6 +210,11 @@ def _render_reindex_progress(progress) -> str:
             '<div class="bg-primary-600 h-2.5 rounded-full transition-all duration-500"'
             f' style="width: {pct}%"></div>'
             "</div>"
+            '<div class="mt-2 flex justify-end">'
+            '<button hx-post="/settings/cancel-reindex" hx-target="#reindex-result"'
+            ' hx-swap="outerHTML"'
+            ' class="text-xs text-red-600 hover:text-red-800 font-medium">'
+            "Cancel</button></div>"
             "</div></div>"
         )
 
@@ -175,6 +223,14 @@ def _render_reindex_progress(progress) -> str:
             '<div id="reindex-result">'
             '<div class="text-red-600 text-sm font-medium mt-2">'
             f"Reindex failed: {progress.error}</div></div>"
+        )
+
+    if progress.cancelled:
+        done = progress.done - progress.failed
+        return (
+            '<div id="reindex-result">'
+            '<div class="text-amber-600 text-sm font-medium mt-2">'
+            f"Reindex cancelled — {done} documents indexed before stop</div></div>"
         )
 
     if progress.finished_at:
@@ -186,6 +242,64 @@ def _render_reindex_progress(progress) -> str:
         )
 
     return '<div id="reindex-result"></div>'
+
+
+def _render_poll_progress(progress) -> str:
+    """Build an HTML fragment for the poll progress area."""
+    if progress.running:
+        pct = int(progress.done / progress.total * 100) if progress.total > 0 else 0
+        phase_labels = {
+            "prepare": "Preparing",
+            "ocr": "OCR correction",
+            "embed": "Embedding",
+            "classify": "Classifying",
+        }
+        label = phase_labels.get(progress.phase, "Starting")
+        return (
+            '<div id="poll-result" hx-get="/settings/poll-status"'
+            ' hx-trigger="every 2s" hx-swap="outerHTML">'
+            '<div class="mt-2">'
+            '<div class="flex justify-between text-sm text-gray-600 mb-1">'
+            f"<span>{label}…</span>"
+            f"<span>{progress.done} / {progress.total} documents</span>"
+            "</div>"
+            '<div class="w-full bg-gray-200 rounded-full h-2.5">'
+            '<div class="bg-primary-600 h-2.5 rounded-full transition-all duration-500"'
+            f' style="width: {pct}%"></div>'
+            "</div>"
+            '<div class="mt-2 flex justify-end">'
+            '<button hx-post="/settings/cancel-poll" hx-target="#poll-result"'
+            ' hx-swap="outerHTML"'
+            ' class="text-xs text-red-600 hover:text-red-800 font-medium">'
+            "Cancel</button></div>"
+            "</div></div>"
+        )
+
+    if progress.error:
+        return (
+            '<div id="poll-result">'
+            '<div class="text-red-600 text-sm font-medium mt-2">'
+            f"Poll failed: {progress.error}</div></div>"
+        )
+
+    if progress.cancelled:
+        return (
+            '<div id="poll-result">'
+            '<div class="text-amber-600 text-sm font-medium mt-2">'
+            f"Poll cancelled ({progress.done}/{progress.total} processed)</div></div>"
+        )
+
+    if progress.total > 0 and not progress.running:
+        return (
+            '<div id="poll-result">'
+            '<div class="text-green-700 text-sm font-medium mt-2">'
+            f"Poll complete: {progress.succeeded} processed"
+            f"{', ' + str(progress.failed) + ' failed' if progress.failed else ''}"
+            f"{', ' + str(progress.skipped) + ' skipped' if progress.skipped else ''}"
+            "</div></div>"
+        )
+
+    return '<div id="poll-result"></div>'
 
 
 @router.post("/update-prompt")

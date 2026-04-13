@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -35,6 +36,83 @@ ProcessResult = Literal["skipped", "classified", "auto_committed"]
 # Module-level refs set by start_scheduler
 _paperless: PaperlessClient | None = None
 _ollama: OllamaClient | None = None
+
+
+# ---------------------------------------------------------------------------
+# Poll progress tracking
+# ---------------------------------------------------------------------------
+@dataclass
+class PollProgress:
+    """Module-level state for tracking a running poll job."""
+
+    running: bool = False
+    total: int = 0
+    done: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    skipped: int = 0
+    phase: str = ""  # "prepare", "ocr", "embed", "classify"
+    cancelled: bool = False
+    error: str | None = None
+
+
+_poll_progress = PollProgress()
+_poll_task: asyncio.Task | None = None
+
+
+def get_poll_progress() -> PollProgress:
+    """Return the current poll progress."""
+    return _poll_progress
+
+
+def is_polling() -> bool:
+    """Return ``True`` while a manual poll task is running."""
+    return _poll_progress.running
+
+
+def cancel_poll() -> bool:
+    """Request cancellation of the running poll task.
+
+    Returns ``True`` if cancellation was requested, ``False`` if not running.
+    """
+    if not _poll_progress.running:
+        return False
+    _poll_progress.cancelled = True
+    return True
+
+
+def start_poll_task() -> bool:
+    """Launch ``poll_inbox`` as a background asyncio task.
+
+    Returns ``True`` if started, ``False`` if already running or reindexing.
+    """
+    if _poll_progress.running or is_reindexing():
+        return False
+
+    # Initialise progress BEFORE creating the task so the HTTP response
+    # immediately sees running=True.
+    _poll_progress.running = True
+    _poll_progress.total = 0
+    _poll_progress.done = 0
+    _poll_progress.succeeded = 0
+    _poll_progress.failed = 0
+    _poll_progress.skipped = 0
+    _poll_progress.phase = "prepare"
+    _poll_progress.cancelled = False
+    _poll_progress.error = None
+
+    async def _run() -> None:
+        try:
+            await poll_inbox()
+        except Exception as exc:
+            _poll_progress.error = str(exc)
+            log.error("background poll failed", error=str(exc))
+        finally:
+            _poll_progress.running = False
+
+    global _poll_task
+    _poll_task = asyncio.create_task(_run())
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -358,6 +436,10 @@ async def _phase_ocr(
     log.info("phase ocr started", count=len(docs), mode=ocr_mode)
     corrected: list[PaperlessDocument] = []
     for doc in docs:
+        if _poll_progress.cancelled:
+            log.info("poll cancelled during OCR phase")
+            corrected.append(doc)
+            continue
         try:
             text, num_corrections = await maybe_correct_ocr(doc, ollama, paperless)
             if num_corrections > 0:
@@ -387,6 +469,9 @@ async def _phase_embed(
     results: dict[int, _EmbeddingResult] = {}
 
     for doc in docs:
+        if _poll_progress.cancelled:
+            log.info("poll cancelled during embed phase")
+            break
         er = _EmbeddingResult()
         summary = context_builder.document_summary(doc)
         if summary.strip():
@@ -424,6 +509,9 @@ async def _phase_classify(
     errored = 0
 
     for doc in docs:
+        if _poll_progress.cancelled:
+            log.info("poll cancelled during classify phase")
+            break
         er = embed_results.get(doc.id, _EmbeddingResult())
         context_docs = [r.document for r in er.similar_results]
 
@@ -479,10 +567,14 @@ async def _phase_classify(
                 auto_committed += 1
             else:
                 classified += 1
+            _poll_progress.succeeded += 1
         except Exception as exc:
             errored += 1
+            _poll_progress.failed += 1
             log.error("classification failed", doc_id=doc.id, error=str(exc))
             _write_error("classify", doc.id, exc)
+        finally:
+            _poll_progress.done += 1
 
         # Index pre-computed embedding regardless of classification outcome
         if er.embedding is not None:
@@ -551,6 +643,9 @@ async def poll_inbox() -> None:
         _mark_pending(doc)
         batch.append(doc)
 
+    _poll_progress.total = len(batch)
+    _poll_progress.skipped = skipped
+
     if not batch:
         log.info(
             "poll cycle complete",
@@ -563,12 +658,24 @@ async def poll_inbox() -> None:
         return
 
     # --- Phase 1: OCR correction (optional, mode-dependent) ---
+    _poll_progress.phase = "ocr"
+    if _poll_progress.cancelled:
+        log.info("poll cancelled before OCR phase")
+        return
     batch = await _phase_ocr(batch, _ollama, _paperless)
 
     # --- Phase 2: Embedding + context search (embed model) ---
+    _poll_progress.phase = "embed"
+    if _poll_progress.cancelled:
+        log.info("poll cancelled before embed phase")
+        return
     embed_results = await _phase_embed(batch, _paperless, _ollama)
 
     # --- Phase 3: Classification + post-processing (chat model) ---
+    _poll_progress.phase = "classify"
+    if _poll_progress.cancelled:
+        log.info("poll cancelled before classify phase")
+        return
     classified, auto_committed, errored = await _phase_classify(
         batch,
         embed_results,
@@ -612,6 +719,14 @@ def _write_error(stage: str, doc_id: int | None, exc: Exception) -> None:
 # ---------------------------------------------------------------------------
 # Scheduler lifecycle
 # ---------------------------------------------------------------------------
+async def _scheduled_poll() -> None:
+    """Wrapper for APScheduler that skips when a manual poll is running."""
+    if _poll_progress.running:
+        log.info("manual poll in progress — skipping scheduled poll")
+        return
+    await poll_inbox()
+
+
 def start_scheduler(app: object) -> None:
     """Initialise and start the APScheduler."""
     global _paperless, _ollama
@@ -621,7 +736,7 @@ def start_scheduler(app: object) -> None:
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
-        poll_inbox,
+        _scheduled_poll,
         "interval",
         seconds=settings.poll_interval_seconds,
         id="poll_inbox",
