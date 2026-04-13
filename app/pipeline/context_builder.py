@@ -55,8 +55,11 @@ def store_embedding(doc: PaperlessDocument, embedding: list[float]) -> None:
     """
     blob = _serialize_embedding(embedding)
     with get_conn() as conn:
+        # sqlite-vec vec0 tables don't support INSERT OR REPLACE,
+        # so delete any existing row first.
+        conn.execute("DELETE FROM doc_embeddings WHERE document_id = ?", (doc.id,))
         conn.execute(
-            "INSERT OR REPLACE INTO doc_embeddings(document_id, embedding) VALUES (?, ?)",
+            "INSERT INTO doc_embeddings(document_id, embedding) VALUES (?, ?)",
             (doc.id, blob),
         )
         conn.execute(

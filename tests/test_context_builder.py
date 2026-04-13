@@ -483,14 +483,19 @@ class TestStoreEmbedding:
         ):
             store_embedding(doc, embedding)
 
-        # Should have executed 2 SQL statements
-        assert mock_conn.execute.call_count == 2
-        # First call: doc_embeddings INSERT
-        first_sql = mock_conn.execute.call_args_list[0][0][0]
-        assert "doc_embeddings" in first_sql
-        # Second call: doc_embedding_meta INSERT
-        second_sql = mock_conn.execute.call_args_list[1][0][0]
-        assert "doc_embedding_meta" in second_sql
+        # Should have executed 3 SQL statements (DELETE + INSERT + meta INSERT)
+        assert mock_conn.execute.call_count == 3
+        # First call: DELETE existing embedding from doc_embeddings
+        delete_sql = mock_conn.execute.call_args_list[0][0][0]
+        assert "DELETE" in delete_sql
+        assert "doc_embeddings" in delete_sql
+        # Second call: INSERT into doc_embeddings
+        insert_sql = mock_conn.execute.call_args_list[1][0][0]
+        assert "INSERT" in insert_sql
+        assert "doc_embeddings" in insert_sql
+        # Third call: doc_embedding_meta INSERT
+        meta_sql = mock_conn.execute.call_args_list[2][0][0]
+        assert "doc_embedding_meta" in meta_sql
 
 
 # ---------------------------------------------------------------------------
