@@ -182,7 +182,11 @@ class OllamaClient:
         last_exc: Exception | None = None
 
         for attempt in range(1 + max_retries):
-            payload = {"model": self.embed_model, "prompt": prompt}
+            payload = {
+                "model": self.embed_model,
+                "prompt": prompt,
+                "options": {"num_ctx": settings.ollama_embed_num_ctx},
+            }
             try:
                 r = await self._client.post("/api/embeddings", json=payload)
                 r.raise_for_status()

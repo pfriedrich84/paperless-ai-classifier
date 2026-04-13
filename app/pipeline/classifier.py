@@ -34,13 +34,13 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def _estimate_tokens(text: str) -> int:
-    """Rough chars-to-tokens estimate (~3.5 chars/token for multilingual)."""
-    return max(1, len(text) * 10 // 35)
+    """Rough chars-to-tokens estimate (~3.0 chars/token for multilingual German)."""
+    return max(1, len(text) * 10 // 30)
 
 
 def _tokens_to_chars(tokens: int) -> int:
     """Convert a token budget back to approximate character count."""
-    return tokens * 35 // 10
+    return tokens * 30 // 10
 
 
 def _format_document_block(doc: PaperlessDocument, max_chars: int) -> str:
@@ -143,7 +143,8 @@ def build_user_prompt(
 
     system_tokens = _estimate_tokens("x" * system_prompt_chars) if system_prompt_chars else 0
     fixed_tokens = _estimate_tokens(entity_section) + _estimate_tokens(task_section) + 50
-    doc_budget_tokens = num_ctx - RESPONSE_RESERVE - system_tokens - fixed_tokens
+    # 15% safety margin — chars-to-tokens estimation is inherently approximate
+    doc_budget_tokens = int((num_ctx - RESPONSE_RESERVE - system_tokens - fixed_tokens) * 0.85)
 
     if doc_budget_tokens < 200:
         log.warning("very tight token budget", budget=doc_budget_tokens, num_ctx=num_ctx)

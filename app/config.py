@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     ollama_embed_retries: int = 3
     ollama_embed_retry_base_delay: float = 1.0
     ollama_num_ctx: int = 8192
+    ollama_embed_num_ctx: int = 512
 
     # --- OCR ---
     ocr_mode: str = "off"  # off | text | vision_light | vision_full
@@ -214,6 +215,12 @@ FIELD_META: dict[str, dict[str, Any]] = {
     ),
     "ollama_num_ctx": _fm(
         "Ollama", "Context Window (tokens)", "number", help="num_ctx for the chat model"
+    ),
+    "ollama_embed_num_ctx": _fm(
+        "Ollama",
+        "Embed Context Window (tokens)",
+        "number",
+        help="num_ctx for the embedding model (match model's training context, e.g. 512 for nomic)",
     ),
     # --- Worker ---
     "poll_interval_seconds": _fm(
