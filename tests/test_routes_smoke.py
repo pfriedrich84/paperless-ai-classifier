@@ -68,6 +68,11 @@ class TestRouteSmoke:
         r = client.get("/settings")
         assert r.status_code == 200
 
+    def test_chat(self, client):
+        r = client.get("/chat")
+        assert r.status_code == 200
+        assert "Chat" in r.text
+
     def test_embeddings(self, client):
         r = client.get("/embeddings")
         assert r.status_code == 200

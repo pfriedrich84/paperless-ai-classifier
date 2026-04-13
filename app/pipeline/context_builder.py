@@ -186,6 +186,64 @@ async def find_similar_documents(
     return [r.document for r in results]
 
 
+async def find_similar_by_query_text(
+    query_text: str,
+    paperless: PaperlessClient,
+    ollama: OllamaClient,
+    limit: int | None = None,
+) -> list[SimilarDocument]:
+    """Embed raw query text and find similar documents via KNN.
+
+    Unlike :func:`find_similar_with_distances` which takes a
+    :class:`PaperlessDocument`, this accepts free-form text (e.g. a user's
+    chat question) and does not exclude a "source" document from results.
+
+    Documents still in the inbox are excluded (same filtering as other
+    similarity functions).
+    """
+    if not query_text.strip():
+        return []
+    limit = limit or settings.context_max_docs
+
+    try:
+        vec = await ollama.embed(query_text)
+    except Exception as exc:
+        log.warning("chat query embedding failed", error=str(exc))
+        return []
+
+    blob = _serialize_embedding(vec)
+    inbox_tag_id = settings.paperless_inbox_tag_id
+
+    k = limit * 2
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT document_id, distance
+              FROM doc_embeddings
+             WHERE embedding MATCH ?
+               AND k = ?
+             ORDER BY distance
+            """,
+            (blob, k),
+        ).fetchall()
+
+    if not rows:
+        return []
+
+    similar: list[SimilarDocument] = []
+    for row in rows:
+        if len(similar) >= limit:
+            break
+        try:
+            d = await paperless.get_document(row["document_id"])
+            if inbox_tag_id in d.tags:
+                continue
+            similar.append(SimilarDocument(document=d, distance=row["distance"]))
+        except Exception as exc:
+            log.warning("failed to load similar doc", id=row["document_id"], error=str(exc))
+    return similar
+
+
 def find_similar_by_id(
     document_id: int,
     limit: int = 10,

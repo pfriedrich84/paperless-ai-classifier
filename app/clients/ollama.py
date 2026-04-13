@@ -157,6 +157,39 @@ class OllamaClient:
             raise ValueError(f"Invalid JSON from Ollama vision: {content[:200]}") from None
 
     # ---------------------------------------------------------------
+    # Chat (plain text, for conversational RAG)
+    # ---------------------------------------------------------------
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None = None,
+        temperature: float = 0.3,
+    ) -> str:
+        """Call Ollama chat and return the plain-text response.
+
+        Unlike ``chat_json()``, this does **not** set ``format="json"`` and
+        returns the raw assistant message content.  Designed for conversational
+        RAG where the response is natural language.
+
+        *messages* is the full conversation: system, prior turns, and the
+        current user message.
+        """
+        payload = {
+            "model": model or self.model,
+            "stream": False,
+            "options": {"temperature": temperature, "num_ctx": settings.ollama_num_ctx},
+            "messages": messages,
+        }
+        r = await self._client.post("/api/chat", json=payload)
+        r.raise_for_status()
+        data = r.json()
+        content = data.get("message", {}).get("content", "")
+        if not content:
+            raise ValueError("Ollama returned empty content")
+        return content
+
+    # ---------------------------------------------------------------
     # Embeddings
     # ---------------------------------------------------------------
     @staticmethod

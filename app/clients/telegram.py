@@ -109,7 +109,7 @@ class TelegramClient:
                 params={
                     "offset": self._offset,
                     "timeout": timeout,
-                    "allowed_updates": '["callback_query"]',
+                    "allowed_updates": '["callback_query","message"]',
                 },
                 timeout=timeout + 10,
             )

@@ -220,7 +220,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.warning("ollama not reachable at startup")
 
     start_scheduler(app)
-    start_telegram(telegram, paperless)
+    start_telegram(telegram, paperless, ollama)
     yield
     stop_telegram()
     stop_scheduler(app)
@@ -262,6 +262,7 @@ async def healthz():
 # Routes (imported after app creation to avoid circular imports)
 # ---------------------------------------------------------------------------
 from app.routes import (  # noqa: E402
+    chat,
     embeddings,
     errors,
     inbox,
@@ -277,6 +278,7 @@ from app.routes import setup as setup_routes  # noqa: E402
 
 app.include_router(setup_routes.router)
 app.include_router(index.router)
+app.include_router(chat.router)
 app.include_router(inbox.router)
 app.include_router(review.router)
 app.include_router(tags.router)

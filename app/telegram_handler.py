@@ -1,4 +1,4 @@
-"""Telegram bot: send suggestion notifications and handle inline-keyboard callbacks."""
+"""Telegram bot: send suggestion notifications, handle callbacks, and RAG chat."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import json
 
 import structlog
 
+from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.clients.telegram import TelegramClient
 from app.config import settings
@@ -18,6 +19,7 @@ log = structlog.get_logger(__name__)
 
 _telegram: TelegramClient | None = None
 _paperless: PaperlessClient | None = None
+_ollama: OllamaClient | None = None
 _poll_task: asyncio.Task | None = None  # type: ignore[type-arg]
 
 
@@ -197,30 +199,79 @@ async def _reject_via_telegram(
 
 
 # ----------------------------------------------------------------------
+# Chat handler: process incoming text messages via RAG
+# ----------------------------------------------------------------------
+async def _handle_message(update: dict) -> None:
+    """Process a regular text message as a RAG chat question."""
+    message = update.get("message", {})
+    text = message.get("text", "").strip()
+    chat_id = message.get("chat", {}).get("id")
+
+    if not text or not chat_id:
+        return
+
+    # Skip Telegram commands (future extension)
+    if text.startswith("/"):
+        return
+
+    if not _ollama or not _paperless or not _telegram:
+        return
+
+    from app.chat import ask, get_or_create_session
+
+    session_key = f"tg:{chat_id}"
+    _, session = get_or_create_session(session_key)
+
+    try:
+        result = await ask(text, session, _paperless, _ollama)
+    except Exception as exc:
+        log.error("telegram chat failed", error=str(exc), chat_id=chat_id)
+        await _telegram.send_message(f"Fehler bei der Verarbeitung: {exc}", parse_mode="HTML")
+        return
+
+    # Build response with optional source references
+    answer = result.answer
+    if result.sources:
+        source_lines = ", ".join(f"#{s['id']} {s['title']}" for s in result.sources[:5])
+        answer += f"\n\n<i>Quellen: {source_lines}</i>"
+
+    await _telegram.send_message(answer, parse_mode="HTML")
+    log.info("telegram chat response sent", chat_id=chat_id)
+
+
+# ----------------------------------------------------------------------
 # Polling loop
 # ----------------------------------------------------------------------
 async def _poll_loop() -> None:
-    """Background task: poll Telegram for callback-query updates."""
+    """Background task: poll Telegram for callback queries and messages."""
     log.info("telegram poll loop started")
     while True:
         updates = await _telegram.get_updates(timeout=settings.telegram_poll_interval)
         for update in updates:
             try:
-                await _handle_callback(update)
+                if "callback_query" in update:
+                    await _handle_callback(update)
+                elif "message" in update and "text" in update.get("message", {}):
+                    await _handle_message(update)
             except Exception as exc:
-                log.warning("telegram callback error", error=str(exc))
+                log.warning("telegram update error", error=str(exc))
         await asyncio.sleep(0.5)
 
 
 # ----------------------------------------------------------------------
 # Lifecycle (called from main.py)
 # ----------------------------------------------------------------------
-def start_telegram(telegram: TelegramClient, paperless: PaperlessClient) -> None:
+def start_telegram(
+    telegram: TelegramClient,
+    paperless: PaperlessClient,
+    ollama: OllamaClient | None = None,
+) -> None:
     """Start the Telegram update-polling background task."""
-    global _telegram, _paperless, _poll_task
+    global _telegram, _paperless, _ollama, _poll_task
 
     _telegram = telegram
     _paperless = paperless
+    _ollama = ollama
 
     if not telegram.enabled:
         log.info("telegram disabled — skipping")
