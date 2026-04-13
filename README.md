@@ -16,7 +16,8 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
 - 📝 Multi-Level OCR-Korrektur: text-only, vision-light oder vision-full (konfigurierbar via `OCR_MODE`)
 - 🗄️ SQLite-State mit vollständigem Audit-Trail
 - 🔁 Idempotent: verarbeitet jedes Dokument nur einmal
-- 🤖 Telegram-Bot: Vorschläge direkt im Chat annehmen/ablehnen (optional)
+- 💬 RAG Chat: Fragen zu deinen Dokumenten stellen — im Browser (`/chat`) oder direkt im Telegram-Chat
+- 🤖 Telegram-Bot: Vorschläge annehmen/ablehnen + RAG-Chat für Dokument-Fragen (optional)
 - 🔌 MCP Server: Paperless-NGX + KI-Klassifikation als Tools für Claude Code und andere KI-Assistenten (optional)
 - 🚀 Setup-Wizard: Geführtes Onboarding mit Verbindungstests beim ersten Start (`/setup`)
 - 📊 Embeddings-Dashboard: Vektor-DB-Inspektion und Similarity-Search (`/embeddings`)
@@ -50,6 +51,7 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
         │                     ┌──────────────────────┐
         └─────────────────────│  FastAPI + HTMX GUI  │
                               │   - /review          │
+                              │   - /chat            │
                               │   - /inbox           │
                               │   - /tags            │
                               │   - /embeddings      │
@@ -130,6 +132,8 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text-v2-moe` | Embedding-Modell für Kontext (multilingual) |
 | `OLLAMA_EMBED_RETRIES` | `3` | Anzahl Retries bei Embedding-Fehlern (Truncation + transiente 500er) |
 | `OLLAMA_EMBED_RETRY_BASE_DELAY` | `1.0` | Basis-Delay in Sekunden für exponentiellen Backoff |
+| `OLLAMA_NUM_CTX` | `8192` | Kontextfenster für das Chat-Modell (Tokens) |
+| `OLLAMA_EMBED_NUM_CTX` | `512` | Kontextfenster für das Embedding-Modell (Tokens) |
 | `POLL_INTERVAL_SECONDS` | `300` | Wie oft die Inbox gepollt wird |
 | `CONTEXT_MAX_DOCS` | `5` | Wieviele ähnliche Dokumente in den Prompt |
 | `AUTO_COMMIT_CONFIDENCE` | `0` | Wenn > 0: ab diesem Score automatisch committen (0–100) |

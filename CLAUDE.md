@@ -112,8 +112,9 @@ app/
   models.py            Pydantic-Modelle (Suggestion, TagProposal, etc.)
   worker.py            APScheduler-Job: poll_inbox() mit Phasen-Pipeline
   indexer.py           Initialer + inkrementeller Reindex der Embeddings
-  telegram_handler.py  Telegram-Benachrichtigungen + Inline-Keyboard-Callbacks
+  telegram_handler.py  Telegram-Benachrichtigungen + Inline-Keyboard-Callbacks + RAG-Chat
   config_writer.py     Persistente Settings: config.env schreiben + hot-reload
+  chat.py              RAG-Chat-Core: Session-Management + ask()-Pipeline
   clients/
     paperless.py       Paperless-NGX API Client
     ollama.py          Ollama Chat + Embedding Client
@@ -137,6 +138,7 @@ app/
     resources.py       MCP Resources (inbox, pending suggestions)
   routes/
     index.py           Dashboard / Startseite
+    chat.py            RAG-Chat: Fragen zu Dokumenten stellen (/chat)
     review.py          Review-Queue + Detail + Annehmen/Ablehnen
     tags.py            Tag-Whitelist- und Blacklist-Management
     ocr.py             OCR-Korrektur-Vorschlaege (optional)
@@ -154,6 +156,7 @@ prompts/
   ocr_correction_system.txt    System-Prompt fuer Text-Only OCR-Correction
   ocr_vision_light_system.txt  System-Prompt fuer Vision-OCR (Bild + Text vergleichen)
   ocr_vision_full_system.txt   System-Prompt fuer Vision-OCR (Seite-fuer-Seite)
+  chat_system.txt              System-Prompt fuer RAG-Chat (Deutsch)
 entrypoint.sh            Startet Uvicorn + optional MCP-Server (ENABLE_MCP=true)
 docs/
   architecture.md        Gesamtarchitektur + Datenfluss-Diagramme
@@ -164,6 +167,12 @@ scripts/
 .github/workflows/
   ci.yml                 Lint, Tests, Audit, Docker Build
   docker-publish.yml     GHCR Image Publish bei Release/Push
+.claude/
+  settings.json          Permissions (allow/deny) + PreToolUse-Hooks
+  commands/
+    precommit.md         Ruff-Check + Format + pytest
+    dep-update.md        Dependency-Update mit 3-Tage-Supply-Chain-Pruefung
+    ci-local.md          Lokale CI-Simulation (alle Checks wie in GitHub Actions)
 ```
 
 ## Paperless-API-Reference (nur was wir brauchen)
@@ -387,6 +396,8 @@ Die CI-Pipeline (`lint-and-verify` Job) fuehrt zusaetzlich aus:
 Wenn `ENABLE_TELEGRAM=true` und `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` gesetzt:
 - Neue Vorschlaege werden als Telegram-Nachricht mit Inline-Keyboard gesendet (Accept / Reject / Edit in GUI)
 - Accept/Reject direkt im Chat moeglich, ohne GUI
+- Freitext-Nachrichten werden als RAG-Chat-Fragen verarbeitet: Antworten basieren auf aehnlichen Dokumenten aus dem Embedding-Index
+- Session-Management pro Chat-ID (1h TTL, max 20 Nachrichten History)
 - Benachrichtigungen werden nur fuer manuell zu reviewende Vorschlaege gesendet (nicht fuer auto-committed)
 - Long-Polling (kein Webhook noetig, laeuft hinter NAT/Firewall)
 
