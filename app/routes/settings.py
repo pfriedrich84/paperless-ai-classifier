@@ -350,12 +350,13 @@ async def reset_prompt(request: Request):
             status_code=500,
         )
 
-    # Return the default prompt so the textarea updates
+    # Return success message + OOB swap to update the textarea in-place
     default_prompt = (settings.prompts_dir / "classify_system.txt").read_text(encoding="utf-8")
     return HTMLResponse(
-        f'<div class="text-green-700 text-sm font-medium mt-2">Reset to default</div>'
+        '<div class="text-green-700 text-sm font-medium mt-2">Reset to default</div>'
         f'<textarea id="prompt-text-area" name="prompt_text" rows="20"'
-        f' class="mt-3 block w-full rounded-lg border-gray-300 shadow-sm'
+        f' hx-swap-oob="true"'
+        f' class="block w-full rounded-lg border-gray-300 shadow-sm'
         f" focus:border-primary-500 focus:ring-primary-500 text-sm font-mono"
         f' px-3 py-2 border">{default_prompt}</textarea>'
     )
