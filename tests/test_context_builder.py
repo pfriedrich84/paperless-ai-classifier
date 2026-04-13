@@ -9,9 +9,12 @@ import pytest
 from app.config import settings
 from app.models import PaperlessDocument, PaperlessEntity
 from app.pipeline.context_builder import (
+    document_summary,
     find_similar_by_id,
     find_similar_documents,
     find_similar_with_distances,
+    find_similar_with_precomputed_embedding,
+    store_embedding,
 )
 
 # ---------------------------------------------------------------------------
@@ -380,3 +383,142 @@ class TestFindSimilarById:
             result = find_similar_by_id(42, limit=2)
 
         assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# find_similar_with_precomputed_embedding
+# ---------------------------------------------------------------------------
+class TestFindSimilarWithPrecomputedEmbedding:
+    @pytest.mark.asyncio
+    async def test_uses_precomputed_embedding(self):
+        """Should use the provided embedding without calling ollama.embed()."""
+        doc_a = _make_doc(10)
+        target = _make_doc(42, inbox=True)
+        embedding = [0.1] * 768
+
+        paperless = AsyncMock()
+        paperless.get_document = AsyncMock(return_value=doc_a)
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            _mock_db_rows_with_distance([(10, 0.25)]),
+        ):
+            results = await find_similar_with_precomputed_embedding(
+                target, embedding, paperless, limit=5
+            )
+
+        assert len(results) == 1
+        assert results[0].document.id == 10
+        assert results[0].distance == 0.25
+
+    @pytest.mark.asyncio
+    async def test_filters_inbox_docs(self):
+        """Inbox docs should be excluded just like in find_similar_with_distances."""
+        classified = _make_doc(10)
+        inbox_doc = _make_doc(20, inbox=True)
+        target = _make_doc(42, inbox=True)
+        embedding = [0.1] * 768
+
+        paperless = AsyncMock()
+        paperless.get_document = AsyncMock(
+            side_effect=lambda doc_id: {10: classified, 20: inbox_doc}[doc_id]
+        )
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            _mock_db_rows_with_distance([(10, 0.2), (20, 0.3)]),
+        ):
+            results = await find_similar_with_precomputed_embedding(
+                target, embedding, paperless, limit=5
+            )
+
+        assert len(results) == 1
+        assert results[0].document.id == 10
+
+    @pytest.mark.asyncio
+    async def test_excludes_self(self):
+        """The source document should be excluded from results."""
+        other_doc = _make_doc(10)
+        target = _make_doc(42, inbox=True)
+        embedding = [0.1] * 768
+
+        paperless = AsyncMock()
+        paperless.get_document = AsyncMock(return_value=other_doc)
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            _mock_db_rows_with_distance([(42, 0.0), (10, 0.3)]),
+        ):
+            results = await find_similar_with_precomputed_embedding(
+                target, embedding, paperless, limit=5
+            )
+
+        assert len(results) == 1
+        assert results[0].document.id == 10
+
+
+# ---------------------------------------------------------------------------
+# store_embedding
+# ---------------------------------------------------------------------------
+class TestStoreEmbedding:
+    def test_writes_to_both_tables(self):
+        """store_embedding should write to doc_embeddings and doc_embedding_meta."""
+        doc = PaperlessDocument(
+            id=42,
+            title="Test Doc",
+            content="content",
+            correspondent=2,
+            document_type=10,
+            tags=[99],
+        )
+        embedding = [0.1] * 768
+
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "app.pipeline.context_builder.get_conn",
+            MagicMock(return_value=mock_conn),
+        ):
+            store_embedding(doc, embedding)
+
+        # Should have executed 2 SQL statements
+        assert mock_conn.execute.call_count == 2
+        # First call: doc_embeddings INSERT
+        first_sql = mock_conn.execute.call_args_list[0][0][0]
+        assert "doc_embeddings" in first_sql
+        # Second call: doc_embedding_meta INSERT
+        second_sql = mock_conn.execute.call_args_list[1][0][0]
+        assert "doc_embedding_meta" in second_sql
+
+
+# ---------------------------------------------------------------------------
+# document_summary
+# ---------------------------------------------------------------------------
+class TestDocumentSummary:
+    def test_title_and_content(self):
+        """Should include title and truncated content."""
+        doc = _make_doc(1, title="My Title", content="My Content")
+        result = document_summary(doc)
+        assert "My Title" in result
+        assert "My Content" in result
+
+    def test_content_truncated_at_1000(self):
+        """Content should be limited to 1000 chars."""
+        doc = _make_doc(1, content="x" * 2000)
+        result = document_summary(doc)
+        # Title + newline + 1000 chars of content
+        assert len(result) <= len("Doc 1") + 1 + 1000
+
+    def test_empty_content(self):
+        """A doc with only a title should still return the title."""
+        doc = PaperlessDocument(id=1, title="Title Only", content="", tags=[])
+        result = document_summary(doc)
+        assert result == "Title Only"
+
+    def test_empty_title_and_content(self):
+        """A doc with no title and no content should return empty string."""
+        doc = PaperlessDocument(id=1, title="", content="", tags=[])
+        result = document_summary(doc)
+        assert result == ""

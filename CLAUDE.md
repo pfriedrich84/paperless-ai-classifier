@@ -6,6 +6,85 @@ Kontext fuer Claude / Claude Code, wenn an diesem Repo gearbeitet wird.
 
 KI-basierter Klassifikator fuer Paperless-NGX. Pollt die Inbox (Tag `Posteingang`), laesst ein lokales Ollama-Modell fuenf Felder vorschlagen (Titel, Datum, Korrespondent, Dokumenttyp, Speicherpfad), zeigt die Vorschlaege in einer Review-GUI, und schreibt sie nach manueller Freigabe via PATCH zurueck in Paperless. Der `Posteingang`-Tag bleibt nach Commit standardmaessig erhalten (`KEEP_INBOX_TAG=true`).
 
+## Klassifikationsansatz — Kontext statt Isolation
+
+Viele LLM-basierte Klassifikatoren fuer Dokumentenmanagement verfolgen den gleichen
+naiven Ansatz: Dokument-Text an das LLM senden, ein paar verfuegbare Kategorien
+auflisten, fertig. Jedes Dokument wird **isoliert** klassifiziert — das Modell sieht
+nur den Rohtext und eine Liste von Entitaetsnamen, aber nie, wie fruehere Dokumente
+tatsaechlich eingeordnet wurden.
+
+Dieser Klassifikator geht einen fundamentalen Schritt weiter:
+
+### Kontext-basierte Klassifikation (Few-Shot aus eigenen Daten)
+
+```
+                  Neues Dokument
+                       |
+                  [Embedding]          ← nomic-embed-text-v2-moe
+                       |
+              KNN-Suche in sqlite-vec
+                       |
+          +-----------+-----------+
+          |           |           |
+      Dok #312    Dok #891    Dok #45     ← Aehnlichste bereits klassifizierte Dokumente
+      Rechnung    Rechnung    Rechnung
+      Stadtwerke  Stadtwerke  EnBW
+      Finanzen/   Finanzen/   Finanzen/
+          |           |           |
+          +-----------+-----------+
+                       |
+               Kontext-Prompt:
+               "Diese 3 aehnlichen Dokumente wurden so klassifiziert: ..."
+               + Zieldokument
+                       |
+                  [Klassifikation]     ← gemma3:4b
+                       |
+                JSON-Vorschlag mit hoher Konfidenz
+```
+
+**Warum ist das besser?**
+
+1. **Implizites Few-Shot-Learning:** Das LLM sieht nicht nur abstrakte Kategorienamen
+   (`"Rechnung"`, `"Vertrag"`), sondern konkrete Beispiele aus dem eigenen Archiv.
+   Wenn drei aehnliche Dokumente alle dem Korrespondenten "Stadtwerke Muenchen" und
+   dem Typ "Rechnung" zugeordnet wurden, ist das ein starkes Signal — staerker als
+   jede generische Prompt-Anweisung.
+
+2. **Selbstverbesserung ohne Training:** Mit jedem klassifizierten Dokument waechst
+   der Embedding-Index. Neue Dokumente profitieren automatisch von besseren Kontexten.
+   Nach 50 klassifizierten Rechnungen desselben Absenders ist die Trefferquote
+   praktisch 100% — ohne jedes Fine-Tuning.
+
+3. **Benutzer-Praeferenzen statt Annahmen:** Der Klassifikator lernt die
+   *tatsaechliche* Ordnungslogik des Benutzers. Wenn jemand Gasrechnungen unter
+   "Nebenkosten" statt "Energie" einsortiert, uebernimmt das System dieses Muster
+   aus dem Kontext — ein generischer Prompt wuerde raten.
+
+4. **Kleine Modelle, grosse Ergebnisse:** Durch den reichen Kontext kann ein
+   kompaktes Modell wie `gemma3:4b` (4 Milliarden Parameter) Ergebnisse liefern,
+   die ohne Kontext ein deutlich groesseres Modell erfordern wuerden. Der Kontext
+   kompensiert fehlende Modellkapazitaet.
+
+5. **Robust bei mehrdeutigen Dokumenten:** Ein Brief, der sowohl von der Hausverwaltung
+   als auch vom Energieversorger stammen koennte, wird durch den Kontext eindeutig:
+   Wenn aehnliche Dokumente mit diesem Sprachstil bisher immer der Hausverwaltung
+   zugeordnet wurden, folgt das System diesem Muster.
+
+### Qualitaetsschranken
+
+Der Kontext allein genuegt nicht — zusaetzlich greifen mehrere Sicherheitsnetze:
+
+- **Entity-Whitelisting:** Das LLM darf nur existierende Korrespondenten, Dokumenttypen
+  und Speicherpfade vorschlagen. Neue Tags landen in einer Freigabe-Queue.
+- **Confidence-Gate:** Nur bei explizit konfigurierter Mindest-Konfidenz wird
+  automatisch committed — sonst immer manuelles Review.
+- **Inbox-Exclusion:** Noch nicht reviewte Dokumente werden nie als Kontext genutzt,
+  um fehlerhafte Klassifikationen nicht zu propagieren.
+- **Token-Budget-Management:** Der Prompt verteilt 60% des Kontextfensters auf das
+  Zieldokument und 40% auf Kontext-Dokumente, mit dynamischem Fallback wenn der
+  Platz knapp wird.
+
 ## Nicht-Ziele
 
 - **Kein Re-OCR** der Dokumente. Wir nutzen nur den Volltext, den Paperless bereits extrahiert hat.
@@ -31,7 +110,7 @@ app/
   config.py            pydantic-settings, alles aus .env
   db.py                SQLite-Setup, Schema-Migration, sqlite-vec laden
   models.py            Pydantic-Modelle (Suggestion, TagProposal, etc.)
-  worker.py            APScheduler-Job: poll_inbox() periodisch
+  worker.py            APScheduler-Job: poll_inbox() mit Phasen-Pipeline
   indexer.py           Initialer + inkrementeller Reindex der Embeddings
   telegram_handler.py  Telegram-Benachrichtigungen + Inline-Keyboard-Callbacks
   clients/
@@ -88,7 +167,89 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 
 - `POST /api/chat` mit `format: "json"` → strukturierte JSON-Antwort
 - `POST /api/embeddings` → Vektor fuer Similarity-Suche (Default: `nomic-embed-text-v2-moe`, multilingual DE/EN). Bei Context-Length-Fehlern (500) wird der Text progressiv um 25% gekuerzt und erneut gesendet. Transiente 5xx/429-Fehler werden mit exponentiellem Backoff wiederholt. Konfigurierbar via `OLLAMA_EMBED_RETRIES` (Default: 3) und `OLLAMA_EMBED_RETRY_BASE_DELAY` (Default: 1.0s).
+- `POST /api/generate` mit `keep_alive: 0` → Modell aus VRAM entladen (genutzt zwischen Pipeline-Phasen)
 - `GET /api/tags` → Healthcheck + Modell-Liste
+
+**Drei Modelle im Einsatz:**
+
+| Modell | Zweck | Konfiguration |
+|--------|-------|---------------|
+| `nomic-embed-text-v2-moe` | Embedding-Similarity-Suche | `OLLAMA_EMBED_MODEL` |
+| `gemma3:4b` | Klassifikation (Titel, Datum, etc.) | `OLLAMA_MODEL` |
+| `gemma3:1b` | OCR-Korrektur (optional, kleiner/schneller) | `OLLAMA_OCR_MODEL` |
+
+## Worker-Pipeline (Phasen-Ablauf)
+
+`poll_inbox()` verarbeitet Dokumente in Phasen statt einzeln, um Ollama-Modell-Swaps
+zu minimieren. Ollama laedt immer nur ein Modell gleichzeitig in den GPU-Speicher —
+jeder Modellwechsel kostet mehrere Sekunden (entladen + laden).
+
+```
+                         poll_inbox()
+                              |
+                    +---------+---------+
+                    | Phase 0: Prepare  |  kein Modell
+                    | Inbox holen,      |
+                    | Idempotenz-Filter |
+                    | Pending setzen    |
+                    +---------+---------+
+                              |
+               +--------------+--------------+
+               | Phase 1: OCR-Korrektur      |  OLLAMA_OCR_MODEL
+               | (nur wenn aktiviert)        |  (gemma3:1b)
+               | Fuer alle Docs: Content     |
+               | in-memory korrigieren       |
+               +--+---------+----------------+
+                  |         |
+                  | unload  |  keep_alive=0
+                  |         |
+               +--+---------+----------------+
+               | Phase 2: Embedding          |  OLLAMA_EMBED_MODEL
+               | Fuer alle Docs:             |  (nomic-embed-text-v2-moe)
+               |   1x embed() pro Doc        |
+               |   KNN-Suche → Kontext       |
+               |   Embedding merken          |
+               +--+---------+----------------+
+                  |         |
+                  | unload  |  keep_alive=0
+                  |         |
+               +--+---------+----------------+
+               | Phase 3: Klassifikation     |  OLLAMA_MODEL
+               | Fuer alle Docs:             |  (gemma3:4b)
+               |   classify() mit Kontext    |
+               |   Suggestion speichern      |
+               |   Telegram / Auto-Commit    |
+               |   Embedding in DB schreiben |  (kein Ollama-Call!)
+               +--+---------+----------------+
+                  |         |
+                  | unload  |  keep_alive=0
+                  |         |
+                    +-------+-------+
+                    | Log-Summary   |
+                    +---------------+
+```
+
+**Modell-Switches pro Poll-Zyklus:**
+
+```
+Vorher (pro Dokument):     Doc1: embed → classify → embed → Doc2: embed → classify → embed → ...
+                           = 2*N Switches bei N Dokumenten
+
+Nachher (phasenweise):     [alle embed] → [alle classify]
+                           = 1-2 Switches unabhaengig von N
+
+Ohne OCR:  nomic ──────────> gemma3:4b                    = 1 Switch
+Mit OCR:   gemma3:1b ──> nomic ──────────> gemma3:4b      = 2 Switches
+```
+
+**Embedding-Optimierung:** Jedes Dokument wird nur **einmal** embedded (vorher zweimal:
+einmal fuer Kontext-Suche, einmal fuer Indexierung). Das Embedding wird in
+`_EmbeddingResult` zwischengespeichert und fuer beides wiederverwendet.
+
+**Fehlerbehandlung pro Phase:** Fehler in einer Phase betreffen nur das betroffene
+Dokument. Andere Dokumente werden weiterverarbeitet. Wenn Embedding fehlschlaegt,
+wird ohne Kontext klassifiziert. Wenn Klassifikation fehlschlaegt, wird das
+Embedding trotzdem indexiert (falls vorhanden).
 
 ## Wichtige Invarianten
 
@@ -99,6 +260,8 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 5. **Inbox-Tag bleibt:** Standardmaessig (`KEEP_INBOX_TAG=true`) wird der `Posteingang`-Tag nach Commit NICHT entfernt. Nur mit `KEEP_INBOX_TAG=false` wird er beim Commit entfernt.
 6. **Kontext-Qualitaet:** Nur Dokumente die NICHT mehr im Posteingang sind werden als Kontext fuer neue Klassifikationen genutzt. Inbox-Dokumente sind noch nicht reviewed/approved und wuerden unzuverlaessige Metadaten liefern.
 7. **Kontext-Anreicherung:** Kontext-Dokumente enthalten ihre vollstaendige Klassifikation (Korrespondent, Dokumenttyp, Speicherpfad, Tags, Datum). Regel 9 im System-Prompt weist das LLM an, diese Metadaten als starke Hinweise zu nutzen.
+8. **Phasen-Pipeline:** `poll_inbox()` verarbeitet alle Dokumente phasenweise (OCR → Embedding → Klassifikation) statt einzeln. Jede Phase nutzt genau ein Ollama-Modell und entlaedt es danach via `keep_alive=0`. Das minimiert VRAM-Verbrauch und Modell-Swaps.
+9. **Embedding-Deduplizierung:** Pro Dokument wird `ollama.embed()` genau einmal aufgerufen. Das Ergebnis wird sowohl fuer die KNN-Kontext-Suche als auch fuer die Indexierung wiederverwendet (`_EmbeddingResult`-Dataclass traegt den Vektor zwischen den Phasen).
 
 ## Deployment (Dockhand)
 

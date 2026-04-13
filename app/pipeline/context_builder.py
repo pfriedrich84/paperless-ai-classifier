@@ -32,7 +32,7 @@ def _serialize_embedding(vec: list[float]) -> bytes:
     return struct.pack(f"{EMBED_DIM}f", *vec)
 
 
-def _document_summary(doc: PaperlessDocument) -> str:
+def document_summary(doc: PaperlessDocument) -> str:
     """Short, embedding-friendly text representation of a document.
 
     Limit content to 1000 chars to stay within the embedding model's context
@@ -44,18 +44,16 @@ def _document_summary(doc: PaperlessDocument) -> str:
     return "\n".join(p for p in parts if p)
 
 
-async def index_document(doc: PaperlessDocument, ollama: OllamaClient) -> None:
-    """Compute + persist an embedding for a single document."""
-    text = _document_summary(doc)
-    if not text.strip():
-        return
-    try:
-        vec = await ollama.embed(text)
-    except Exception as exc:
-        log.warning("embedding failed", doc_id=doc.id, error=str(exc))
-        return
+# ---------------------------------------------------------------------------
+# Embedding storage (no Ollama call needed)
+# ---------------------------------------------------------------------------
+def store_embedding(doc: PaperlessDocument, embedding: list[float]) -> None:
+    """Persist a pre-computed embedding for a document.
 
-    blob = _serialize_embedding(vec)
+    Writes to both ``doc_embeddings`` (vector) and ``doc_embedding_meta``
+    (metadata for cache invalidation).  Does **not** call Ollama.
+    """
+    blob = _serialize_embedding(embedding)
     with get_conn() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO doc_embeddings(document_id, embedding) VALUES (?, ?)",
@@ -71,30 +69,40 @@ async def index_document(doc: PaperlessDocument, ollama: OllamaClient) -> None:
         )
 
 
-async def find_similar_with_distances(
-    doc: PaperlessDocument,
-    paperless: PaperlessClient,
-    ollama: OllamaClient,
-    limit: int | None = None,
-) -> list[SimilarDocument]:
-    """Return up to `limit` similar documents with their distance scores.
-
-    Documents still in the inbox (carrying the inbox tag) are excluded — they
-    have not been reviewed/approved yet and would provide unreliable context.
-    We overfetch from the DB to compensate for filtered-out inbox docs.
-    """
-    limit = limit or settings.context_max_docs
-    text = _document_summary(doc)
+async def index_document(doc: PaperlessDocument, ollama: OllamaClient) -> None:
+    """Compute + persist an embedding for a single document."""
+    text = document_summary(doc)
     if not text.strip():
-        return []
-
+        return
     try:
         vec = await ollama.embed(text)
     except Exception as exc:
-        log.warning("context embedding failed", doc_id=doc.id, error=str(exc))
-        return []
+        log.warning("embedding failed", doc_id=doc.id, error=str(exc))
+        return
 
-    blob = _serialize_embedding(vec)
+    store_embedding(doc, vec)
+
+
+# ---------------------------------------------------------------------------
+# Similarity search
+# ---------------------------------------------------------------------------
+async def find_similar_with_precomputed_embedding(
+    doc: PaperlessDocument,
+    embedding: list[float],
+    paperless: PaperlessClient,
+    limit: int | None = None,
+) -> list[SimilarDocument]:
+    """KNN search using a pre-computed embedding vector.
+
+    Like :func:`find_similar_with_distances` but skips the ``ollama.embed()``
+    call — useful when the embedding has already been computed (e.g. in a
+    batched pipeline that separates embedding and classification phases).
+
+    Documents still in the inbox are excluded (same filtering as
+    :func:`find_similar_with_distances`).
+    """
+    limit = limit or settings.context_max_docs
+    blob = _serialize_embedding(embedding)
     inbox_tag_id = settings.paperless_inbox_tag_id
 
     # Overfetch to compensate for inbox docs + self that will be filtered out.
@@ -133,6 +141,31 @@ async def find_similar_with_distances(
         except Exception as exc:
             log.warning("failed to load similar doc", id=row["document_id"], error=str(exc))
     return similar
+
+
+async def find_similar_with_distances(
+    doc: PaperlessDocument,
+    paperless: PaperlessClient,
+    ollama: OllamaClient,
+    limit: int | None = None,
+) -> list[SimilarDocument]:
+    """Return up to `limit` similar documents with their distance scores.
+
+    Documents still in the inbox (carrying the inbox tag) are excluded — they
+    have not been reviewed/approved yet and would provide unreliable context.
+    We overfetch from the DB to compensate for filtered-out inbox docs.
+    """
+    text = document_summary(doc)
+    if not text.strip():
+        return []
+
+    try:
+        vec = await ollama.embed(text)
+    except Exception as exc:
+        log.warning("context embedding failed", doc_id=doc.id, error=str(exc))
+        return []
+
+    return await find_similar_with_precomputed_embedding(doc, vec, paperless, limit)
 
 
 async def find_similar_documents(

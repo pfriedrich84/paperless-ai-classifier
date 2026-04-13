@@ -64,7 +64,7 @@ async def maybe_correct_ocr(
         prompt_path = settings.prompts_dir / "ocr_correction_system.txt"
         system = prompt_path.read_text(encoding="utf-8")
         user_text = text[: settings.max_doc_chars]
-        raw = await ollama.chat_json(system=system, user=user_text)
+        raw = await ollama.chat_json(system=system, user=user_text, model=ollama.ocr_model)
 
         corrected = raw.get("corrected_text", text)
         num = int(raw.get("num_corrections", 0))

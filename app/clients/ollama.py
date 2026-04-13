@@ -29,6 +29,7 @@ class OllamaClient:
         self.base_url = (base_url or settings.ollama_url).rstrip("/")
         self.model = model or settings.ollama_model
         self.embed_model = settings.ollama_embed_model
+        self.ocr_model = settings.ollama_ocr_model
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(settings.ollama_timeout_seconds),
@@ -48,6 +49,17 @@ class OllamaClient:
         except Exception as exc:
             log.warning("ollama ping failed", error=str(exc))
             return False
+
+    async def unload_model(self, model: str) -> None:
+        """Unload a model from VRAM via keep_alive=0."""
+        try:
+            await self._client.post(
+                "/api/generate",
+                json={"model": model, "keep_alive": 0},
+            )
+            log.info("model unloaded", model=model)
+        except Exception as exc:
+            log.warning("failed to unload model", model=model, error=str(exc))
 
     async def model_available(self, name: str) -> bool:
         try:
