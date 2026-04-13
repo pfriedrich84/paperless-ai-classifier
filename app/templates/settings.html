@@ -24,7 +24,7 @@
 
     <!-- Editable config form -->
     <div class="lg:col-span-2 space-y-4">
-        <form id="config-form">
+        <form id="config-form" hx-boost="false">
             {% for category, fields in config_groups.items() %}
             <details {% if loop.index <= 3 %}open{% endif %}
                      class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-4">
@@ -190,7 +190,7 @@
             </div>
         </div>
         <div class="px-6 py-4">
-            <form id="prompt-form">
+            <form id="prompt-form" hx-boost="false">
                 <textarea id="prompt-text-area" name="prompt_text" rows="20"
                           class="block w-full rounded-lg border-gray-300 shadow-sm
                                  focus:border-primary-500 focus:ring-primary-500 text-sm font-mono
@@ -208,7 +208,7 @@
                     </button>
                     <button type="button"
                             hx-post="/settings/reset-prompt"
-                            hx-target="#prompt-reset-area"
+                            hx-target="#prompt-result"
                             hx-swap="innerHTML"
                             hx-confirm="Reset to built-in default? Your custom prompt will be deleted."
                             class="inline-flex items-center px-4 py-2
@@ -219,7 +219,6 @@
                     <div id="prompt-result"></div>
                 </div>
             </form>
-            <div id="prompt-reset-area"></div>
         </div>
     </div>
 
