@@ -36,6 +36,7 @@ class ReindexProgress:
     started_at: str | None = None
     finished_at: str | None = None
     error: str | None = None
+    cancelled: bool = False
 
 
 _reindex_progress = ReindexProgress()
@@ -50,6 +51,17 @@ def get_reindex_progress() -> ReindexProgress:
 def is_reindexing() -> bool:
     """Return ``True`` while a reindex task is running."""
     return _reindex_progress.running
+
+
+def cancel_reindex() -> bool:
+    """Request cancellation of the running reindex task.
+
+    Returns ``True`` if cancellation was requested, ``False`` if not running.
+    """
+    if not _reindex_progress.running:
+        return False
+    _reindex_progress.cancelled = True
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +95,9 @@ async def initial_index(
     ollama.embed_retry_count = 0
     count = 0
     for i, doc in enumerate(new_docs, 1):
+        if _reindex_progress.cancelled:
+            log.info("reindex cancelled by user", done=i - 1, total=len(new_docs))
+            break
         try:
             # Use cached OCR-corrected text if available
             cached = get_cached_ocr(doc.id)
@@ -115,14 +130,6 @@ async def reindex_all(
 
     Use this when the embedding model changes.
     """
-    _reindex_progress.running = True
-    _reindex_progress.total = 0
-    _reindex_progress.done = 0
-    _reindex_progress.failed = 0
-    _reindex_progress.started_at = datetime.now(tz=UTC).isoformat()
-    _reindex_progress.finished_at = None
-    _reindex_progress.error = None
-
     try:
         log.info("starting full reindex — clearing existing embeddings")
         with get_conn() as conn:
@@ -136,6 +143,9 @@ async def reindex_all(
             docs = await paperless.list_all_documents()
             corrected = 0
             for doc in docs:
+                if _reindex_progress.cancelled:
+                    log.info("reindex cancelled during OCR phase")
+                    break
                 if get_cached_ocr(doc.id) is not None:
                     continue  # already cached from a previous run
                 try:
@@ -177,6 +187,17 @@ def start_reindex_task(
     """
     if _reindex_progress.running:
         return False
+
+    # Initialise progress BEFORE creating the task so the HTTP response
+    # immediately sees running=True (fixes the race condition).
+    _reindex_progress.running = True
+    _reindex_progress.total = 0
+    _reindex_progress.done = 0
+    _reindex_progress.failed = 0
+    _reindex_progress.started_at = datetime.now(tz=UTC).isoformat()
+    _reindex_progress.finished_at = None
+    _reindex_progress.error = None
+    _reindex_progress.cancelled = False
 
     async def _run() -> None:
         try:

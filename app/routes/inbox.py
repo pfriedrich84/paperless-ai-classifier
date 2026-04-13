@@ -30,11 +30,20 @@ class BulkProcessProgress:
     succeeded: int = 0
     failed: int = 0
     mode: str = ""  # "inbox" or "all"
+    cancelled: bool = False
 
 
 _bulk_progress = BulkProcessProgress()
 _bulk_task: asyncio.Task | None = None
 _reprocess_tasks: set[asyncio.Task] = set()
+
+
+def cancel_bulk() -> bool:
+    """Request cancellation of the running bulk task."""
+    if not _bulk_progress.running:
+        return False
+    _bulk_progress.cancelled = True
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +387,9 @@ async def process_inbox_bulk(request: Request):
             tags = await paperless.list_tags()
 
             for doc in to_process:
+                if _bulk_progress.cancelled:
+                    log.info("bulk process cancelled by user")
+                    break
                 try:
                     # Mark processing (empty last_updated_at so _process_document won't skip)
                     with get_conn() as conn:
@@ -461,6 +473,9 @@ async def process_all_docs(request: Request):
             tags = await paperless.list_tags()
 
             for doc in to_process:
+                if _bulk_progress.cancelled:
+                    log.info("bulk process-all cancelled by user")
+                    break
                 try:
                     # Mark processing (empty last_updated_at so _process_document won't skip)
                     with get_conn() as conn:
@@ -505,6 +520,13 @@ async def bulk_status(request: Request):
     return HTMLResponse(_render_bulk_progress())
 
 
+@router.post("/cancel-bulk")
+async def cancel_bulk_route(request: Request):
+    """Cancel the running bulk processing task."""
+    cancel_bulk()
+    return HTMLResponse(_render_bulk_progress())
+
+
 def _render_bulk_progress() -> str:
     """Build an HTML fragment for the bulk processing progress area."""
     p = _bulk_progress
@@ -525,6 +547,22 @@ def _render_bulk_progress() -> str:
             '<div class="bg-blue-600 h-2.5 rounded-full transition-all duration-500"'
             f' style="width: {pct}%"></div>'
             "</div>"
+            '<div class="mt-2 flex justify-end">'
+            '<button hx-post="/inbox/cancel-bulk" hx-target="#bulk-progress"'
+            ' hx-swap="outerHTML"'
+            ' class="text-xs text-red-600 hover:text-red-800 font-medium">'
+            "Cancel</button></div>"
+            "</div></div>"
+        )
+
+    if p.cancelled and p.total > 0:
+        return (
+            '<div id="bulk-progress">'
+            '<div class="mt-3 bg-amber-50 border-amber-200 border rounded-lg p-4 text-sm'
+            ' text-amber-800">'
+            f"Cancelled: {p.succeeded} processed, {p.failed} failed"
+            f" (stopped at {p.done}/{p.total})"
+            ' &mdash; <a href="/inbox" class="underline font-medium">Refresh page</a>'
             "</div></div>"
         )
 

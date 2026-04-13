@@ -116,18 +116,25 @@
                     <p class="text-sm text-gray-600 mb-2">Run the inbox poll immediately.</p>
                     <button hx-post="/settings/trigger-poll"
                             hx-target="#poll-result"
-                            hx-swap="innerHTML"
-                            hx-indicator="#poll-spinner"
+                            hx-swap="outerHTML"
+                            hx-disabled-elt="this"
                             class="w-full inline-flex justify-center items-center px-4 py-2.5
                                    bg-primary-600 text-white text-sm font-medium rounded-lg
-                                   hover:bg-primary-700 transition-colors">
-                        <svg id="poll-spinner" class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                   hover:bg-primary-700 transition-colors
+                                   disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                         </svg>
                         Trigger Poll
                     </button>
+                    {% if poll.running %}
+                    <div id="poll-result" hx-get="/settings/poll-status"
+                         hx-trigger="every 2s" hx-swap="outerHTML">
+                    </div>
+                    {% else %}
                     <div id="poll-result"></div>
+                    {% endif %}
                 </div>
 
                 <hr class="border-gray-100">
@@ -138,13 +145,12 @@
                             hx-target="#reindex-result"
                             hx-swap="outerHTML"
                             hx-confirm="This will drop and rebuild all embeddings. Continue?"
-                            hx-indicator="#reindex-spinner"
                             hx-disabled-elt="this"
                             class="w-full inline-flex justify-center items-center px-4 py-2.5
                                    bg-amber-600 text-white text-sm font-medium rounded-lg
                                    hover:bg-amber-700 transition-colors
                                    disabled:opacity-50 disabled:cursor-not-allowed">
-                        <svg id="reindex-spinner" class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <svg class="htmx-indicator animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                         </svg>
