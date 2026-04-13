@@ -235,7 +235,9 @@ class OllamaClient:
                     prompt = prompt[: int(len(prompt) * 0.75)]
                     self.embed_retry_count += 1
                     log.warning(
-                        "embedding input exceeds context length, truncating",
+                        "embedding input exceeds context length, truncating"
+                        " — consider lowering EMBED_MAX_CHARS"
+                        f" (currently {settings.embed_max_chars})",
                         attempt=attempt + 1,
                         new_len=len(prompt),
                     )

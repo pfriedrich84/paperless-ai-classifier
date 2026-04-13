@@ -509,12 +509,19 @@ class TestDocumentSummary:
         assert "My Title" in result
         assert "My Content" in result
 
-    def test_content_truncated_at_1000(self):
-        """Content should be limited to 1000 chars."""
+    def test_content_truncated_at_default(self):
+        """Content should be limited to embed_max_chars (default 1000)."""
         doc = _make_doc(1, content="x" * 2000)
         result = document_summary(doc)
-        # Title + newline + 1000 chars of content
+        # Title + newline + default embed_max_chars chars of content
         assert len(result) <= len("Doc 1") + 1 + 1000
+
+    def test_content_truncated_at_custom_limit(self, monkeypatch):
+        """Content truncation should respect a custom embed_max_chars value."""
+        monkeypatch.setattr("app.pipeline.context_builder.settings.embed_max_chars", 500)
+        doc = _make_doc(1, content="x" * 2000)
+        result = document_summary(doc)
+        assert len(result) <= len("Doc 1") + 1 + 500
 
     def test_empty_content(self):
         """A doc with only a title should still return the title."""

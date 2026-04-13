@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     poll_interval_seconds: int = 300
     context_max_docs: int = 5
     max_doc_chars: int = 8000
+    embed_max_chars: int = 1000
     auto_commit_confidence: int = 0  # 0 = immer manuell reviewen
     enable_ocr_correction: bool = False  # deprecated, use ocr_mode instead
 
@@ -285,6 +286,12 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Max Document Chars",
         "number",
         help="Max characters of document text sent to the LLM",
+    ),
+    "embed_max_chars": _fm(
+        "Worker",
+        "Embed Max Chars",
+        "number",
+        help="Max characters of document text used for embedding (similarity search)",
     ),
     "auto_commit_confidence": _fm(
         "Worker",

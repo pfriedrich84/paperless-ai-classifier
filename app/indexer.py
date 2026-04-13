@@ -10,6 +10,7 @@ import structlog
 
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
+from app.config import settings
 from app.db import get_conn
 from app.pipeline.context_builder import index_document
 from app.pipeline.ocr_correction import (
@@ -119,6 +120,12 @@ async def initial_index(
         skipped=len(new_docs) - count,
         embed_retries=ollama.embed_retry_count,
     )
+    if ollama.embed_retry_count > 0:
+        log.warning(
+            "embedding retries occurred — lower EMBED_MAX_CHARS to avoid extra round-trips",
+            retries=ollama.embed_retry_count,
+            current_embed_max_chars=settings.embed_max_chars,
+        )
     return count
 
 
@@ -161,8 +168,6 @@ async def reindex_all(
             if ocr_mode == "text":
                 await ollama.unload_model(ollama.ocr_model)
             else:
-                from app.config import settings
-
                 vision_model = settings.ocr_vision_model or ollama.model
                 await ollama.unload_model(vision_model)
 
