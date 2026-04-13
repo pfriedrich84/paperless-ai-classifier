@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Bash(ruff check *)",
+      "Bash(ruff format *)",
+      "Bash(pytest *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git add *)",
+      "Bash(pip install *)",
+      "Bash(pip check*)",
+      "Bash(python scripts/check_dependency_age.py*)",
+      "Bash(ls *)",
+      "Bash(cat .env.example)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force*)",
+      "Bash(git reset --hard*)",
+      "Bash(docker rm *)",
+      "Bash(docker rmi *)",
+      "Edit(.env)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash(git commit *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff check app/ tests/ && ruff format --check app/ tests/",
+            "statusMessage": "Lint/Format-Check vor Commit..."
+          }
+        ]
+      }
+    ]
+  }
+}
