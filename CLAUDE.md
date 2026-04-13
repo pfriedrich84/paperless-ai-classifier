@@ -118,7 +118,8 @@ app/
     ollama.py          Ollama Chat + Embedding Client
     telegram.py        Telegram Bot API Client (httpx, Long-Polling)
   pipeline/
-    ocr_correction.py  Optional: OCR-Fehler via LLM korrigieren
+    ocr_correction.py  Multi-Level OCR-Korrektur (off/text/vision_light/vision_full)
+    pdf_renderer.py    PDF/Bild → base64 JPEG fuer Vision-Modelle (PyMuPDF)
     context_builder.py Aehnliche Dokumente via Embedding-Similarity finden
     classifier.py      Prompt bauen, Ollama aufrufen, JSON parsen
     committer.py       Angenommene Vorschlaege nach Paperless schreiben
@@ -145,8 +146,10 @@ app/
   templates/           Jinja2 + HTMX
   static/              CSS
 prompts/
-  classify_system.txt  System-Prompt fuer Klassifikation (Deutsch)
-  ocr_correction_system.txt  System-Prompt fuer OCR-Correction
+  classify_system.txt          System-Prompt fuer Klassifikation (Deutsch)
+  ocr_correction_system.txt    System-Prompt fuer Text-Only OCR-Correction
+  ocr_vision_light_system.txt  System-Prompt fuer Vision-OCR (Bild + Text vergleichen)
+  ocr_vision_full_system.txt   System-Prompt fuer Vision-OCR (Seite-fuer-Seite)
 entrypoint.sh            Startet Uvicorn + optional MCP-Server (ENABLE_MCP=true)
 ```
 
@@ -199,6 +202,36 @@ Konfigurierbar via `OCR_MODE` mit vier Stufen:
 
 **Graceful Degradation:** `vision_full` → `vision_light` → `text` → `off`. Jede Stufe faengt Fehler ab und faellt auf die naechst niedrigere zurueck.
 
+### Reindex mit OCR
+
+`reindex_all()` integriert OCR-Korrektur als Phase vor dem Embedding:
+
+```
+reindex_all()
+     |
+     ├── Embeddings loeschen (doc_embeddings + doc_embedding_meta)
+     |
+     ├── Phase 0: OCR-Korrektur  (nur wenn OCR_MODE != off)
+     │   ├── Alle Docs aus Paperless holen
+     │   ├── Fuer jedes Dokument:
+     │   │   ├── doc_ocr_cache pruefen → vorhanden? Skip
+     │   │   ├── maybe_correct_ocr(doc, ollama, paperless)
+     │   │   └── Ergebnis in doc_ocr_cache speichern
+     │   └── OCR/Vision-Modell entladen (keep_alive=0)
+     |
+     ├── Phase 1: Embedding
+     │   ├── Fuer jedes Dokument:
+     │   │   ├── doc_ocr_cache pruefen → korrigierten Text nutzen
+     │   │   └── embed(text) → doc_embeddings
+     │   └── Embed-Modell entladen
+     |
+     └── Fertig
+```
+
+Beim wiederholten Reindex (z.B. nach Embedding-Modellwechsel) werden gecachte
+OCR-Korrekturen wiederverwendet — nur Embeddings werden neu berechnet.
+`doc_ocr_cache` manuell leeren um OCR neu zu erzwingen.
+
 ## Worker-Pipeline (Phasen-Ablauf)
 
 `poll_inbox()` verarbeitet Dokumente in Phasen statt einzeln, um Ollama-Modell-Swaps
@@ -216,10 +249,10 @@ jeder Modellwechsel kostet mehrere Sekunden (entladen + laden).
                     +---------+---------+
                               |
                +--------------+--------------+
-               | Phase 1: OCR-Korrektur      |  OLLAMA_OCR_MODEL
-               | (nur wenn aktiviert)        |  (gemma3:1b)
-               | Fuer alle Docs: Content     |
-               | in-memory korrigieren       |
+               | Phase 1: OCR-Korrektur      |  je nach OCR_MODE:
+               | (nur wenn OCR_MODE != off)  |  text → OLLAMA_OCR_MODEL
+               | Fuer alle Docs: Content     |  vision_* → OCR_VISION_MODEL
+               | korrigieren + cachen        |    (oder OLLAMA_MODEL)
                +--+---------+----------------+
                   |         |
                   | unload  |  keep_alive=0
@@ -259,8 +292,13 @@ Vorher (pro Dokument):     Doc1: embed → classify → embed → Doc2: embed �
 Nachher (phasenweise):     [alle embed] → [alle classify]
                            = 1-2 Switches unabhaengig von N
 
-Ohne OCR:  nomic ──────────> gemma3:4b                    = 1 Switch
-Mit OCR:   gemma3:1b ──> nomic ──────────> gemma3:4b      = 2 Switches
+Ohne OCR:        nomic ──────────────> gemma4:e2b                = 1 Switch
+Text-OCR:        gemma3:1b ──> nomic ──────────> gemma4:e2b      = 2 Switches
+Vision-OCR:      gemma4:e2b ──> nomic ──────────> gemma4:e2b     = 2 Switches*
+
+* Bei vision_light/vision_full ist das OCR-Modell = OLLAMA_MODEL (gemma4:e2b),
+  daher wird es nach Phase 1 entladen und fuer Phase 3 wieder geladen.
+  Alternativ via OCR_VISION_MODEL ein separates Vision-Modell konfigurieren.
 ```
 
 **Embedding-Optimierung:** Jedes Dokument wird nur **einmal** embedded (vorher zweimal:
@@ -283,6 +321,7 @@ Embedding trotzdem indexiert (falls vorhanden).
 7. **Kontext-Anreicherung:** Kontext-Dokumente enthalten ihre vollstaendige Klassifikation (Korrespondent, Dokumenttyp, Speicherpfad, Tags, Datum). Regel 9 im System-Prompt weist das LLM an, diese Metadaten als starke Hinweise zu nutzen.
 8. **Phasen-Pipeline:** `poll_inbox()` verarbeitet alle Dokumente phasenweise (OCR → Embedding → Klassifikation) statt einzeln. Jede Phase nutzt genau ein Ollama-Modell und entlaedt es danach via `keep_alive=0`. Das minimiert VRAM-Verbrauch und Modell-Swaps.
 9. **Embedding-Deduplizierung:** Pro Dokument wird `ollama.embed()` genau einmal aufgerufen. Das Ergebnis wird sowohl fuer die KNN-Kontext-Suche als auch fuer die Indexierung wiederverwendet (`_EmbeddingResult`-Dataclass traegt den Vektor zwischen den Phasen).
+10. **OCR-Cache:** Korrigierter Text landet in `doc_ocr_cache`, nie in Paperless. Sowohl `poll_inbox()` als auch `reindex_all()` nutzen gecachte Korrekturen. Beim Reindex wird OCR vor dem Embedding als Phase 0 ausgefuehrt — gecachte Eintraege werden uebersprungen.
 
 ## Deployment (Dockhand)
 
