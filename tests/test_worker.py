@@ -16,6 +16,7 @@ from app.worker import (
     _process_document,
     _resolve_entity,
     _resolve_tags,
+    _upsert_tag_whitelist,
     poll_inbox,
 )
 
@@ -94,6 +95,80 @@ class TestResolveTags:
         proposed = [{"name": "Finanzen"}]  # no confidence key
         _ids, dicts = _resolve_tags(proposed, sample_entities)
         assert dicts[0]["confidence"] == 50  # default
+
+
+class TestBlacklistFiltering:
+    """Verify that blacklisted tags are excluded from whitelist insertion."""
+
+    def test_blacklisted_tag_not_inserted(self, sample_entities, patch_db, tmp_db):
+        """A tag in the blacklist should be silently skipped by _upsert_tag_whitelist."""
+        import sqlite3
+
+        conn = sqlite3.connect(str(tmp_db))
+        conn.execute("INSERT INTO tag_blacklist (name) VALUES ('BadTag')")
+        conn.commit()
+        conn.close()
+
+        proposed = [{"name": "BadTag", "confidence": 90}]
+        ids, dicts = _resolve_tags(proposed, sample_entities)
+        assert ids == []  # not resolved (doesn't exist in Paperless)
+        assert dicts[0]["id"] is None
+
+        # Verify it was NOT inserted into tag_whitelist
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT * FROM tag_whitelist WHERE name = 'BadTag'").fetchone()
+        conn.close()
+        assert row is None
+
+    def test_non_blacklisted_tag_still_inserted(self, sample_entities, patch_db, tmp_db):
+        """Tags not in the blacklist should still be inserted normally."""
+        import sqlite3
+
+        proposed = [{"name": "GoodTag", "confidence": 80}]
+        _resolve_tags(proposed, sample_entities)
+
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT * FROM tag_whitelist WHERE name = 'GoodTag'").fetchone()
+        conn.close()
+        assert row is not None
+
+    def test_blacklisted_tag_not_counted(self, patch_db, tmp_db):
+        """Blacklisted tag should not create or increment any whitelist entry."""
+        import sqlite3
+
+        conn = sqlite3.connect(str(tmp_db))
+        conn.execute("INSERT INTO tag_blacklist (name) VALUES ('BlockedTag')")
+        conn.commit()
+        conn.close()
+
+        _upsert_tag_whitelist("BlockedTag")
+
+        conn = sqlite3.connect(str(tmp_db))
+        row = conn.execute("SELECT * FROM tag_whitelist WHERE name = 'BlockedTag'").fetchone()
+        conn.close()
+        assert row is None
+
+    def test_reject_then_repropose_stays_blocked(self, patch_db, tmp_db, sample_entities):
+        """Tag rejected (in blacklist), then re-proposed by LLM, should stay blocked."""
+        import sqlite3
+
+        # Simulate: tag was once proposed, then rejected → now in blacklist
+        conn = sqlite3.connect(str(tmp_db))
+        conn.execute("INSERT INTO tag_blacklist (name, times_seen) VALUES ('OldTag', 3)")
+        conn.commit()
+        conn.close()
+
+        # LLM proposes same tag again
+        proposed = [{"name": "OldTag", "confidence": 85}]
+        _resolve_tags(proposed, sample_entities)
+
+        # Should NOT appear in whitelist
+        conn = sqlite3.connect(str(tmp_db))
+        wl_row = conn.execute("SELECT * FROM tag_whitelist WHERE name = 'OldTag'").fetchone()
+        bl_row = conn.execute("SELECT * FROM tag_blacklist WHERE name = 'OldTag'").fetchone()
+        conn.close()
+        assert wl_row is None
+        assert bl_row is not None  # still in blacklist
 
 
 class TestProcessDocumentReturn:

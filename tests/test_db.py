@@ -18,6 +18,7 @@ class TestSchema:
             "processed_documents",
             "suggestions",
             "tag_whitelist",
+            "tag_blacklist",
             "errors",
             "doc_embedding_meta",
             "audit_log",
@@ -91,6 +92,19 @@ class TestSchema:
         row = db_conn.execute("SELECT * FROM audit_log WHERE id = 1").fetchone()
         assert row["action"] == "commit"
         assert row["actor"] == "user"
+
+    def test_tag_blacklist_insert(self, db_conn: sqlite3.Connection):
+        """Verify tag blacklist insert and rejected_at auto-set."""
+        db_conn.execute("INSERT INTO tag_blacklist (name, times_seen) VALUES ('BadTag', 3)")
+        row = db_conn.execute("SELECT * FROM tag_blacklist WHERE name = 'BadTag'").fetchone()
+        assert row["times_seen"] == 3
+        assert row["rejected_at"] is not None
+
+    def test_tag_blacklist_primary_key(self, db_conn: sqlite3.Connection):
+        """name is the primary key — duplicates should conflict."""
+        db_conn.execute("INSERT INTO tag_blacklist (name) VALUES ('DupTag')")
+        with pytest.raises(sqlite3.IntegrityError):
+            db_conn.execute("INSERT INTO tag_blacklist (name) VALUES ('DupTag')")
 
     def test_processed_documents_primary_key(self, db_conn: sqlite3.Connection):
         """document_id is the primary key — duplicates should conflict."""

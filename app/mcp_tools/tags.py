@@ -1,4 +1,4 @@
-"""Tag whitelist tools — listing and (opt-in) approval."""
+"""Tag whitelist and blacklist tools — listing, approval, and blacklist management."""
 
 from __future__ import annotations
 
@@ -44,6 +44,33 @@ def register(mcp: FastMCP) -> None:
                 "name": r["name"],
                 "times_seen": r["times_seen"],
                 "first_seen": r["first_seen"],
+                "notes": r["notes"],
+            }
+            for r in rows
+        ]
+        return json.dumps(items, ensure_ascii=False)
+
+    @mcp.tool(
+        name="list_blacklisted_tags",
+        description=(
+            "List tags that have been blacklisted (rejected). "
+            "Blacklisted tags are silently skipped when the classifier proposes them."
+        ),
+        annotations=_RO,
+    )
+    async def list_blacklisted_tags(ctx: Context = None) -> str:
+        check_api_key(ctx)
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT name, times_seen, rejected_at, notes "
+                "FROM tag_blacklist ORDER BY rejected_at DESC"
+            ).fetchall()
+
+        items = [
+            {
+                "name": r["name"],
+                "times_seen": r["times_seen"],
+                "rejected_at": r["rejected_at"],
                 "notes": r["notes"],
             }
             for r in rows
@@ -104,3 +131,31 @@ def register(mcp: FastMCP) -> None:
 
             log.info("tag approved via MCP", tag_name=name, paperless_id=entity.id)
             return json.dumps({"ok": True, "tag_name": name, "paperless_id": entity.id})
+
+        @mcp.tool(
+            name="unblacklist_tag",
+            description=(
+                "Remove a tag from the blacklist. The classifier will be able to "
+                "propose this tag again in future classifications."
+            ),
+            annotations=ToolAnnotations(
+                readOnlyHint=False, destructiveHint=False, idempotentHint=True
+            ),
+        )
+        async def unblacklist_tag(name: str, ctx: Context = None) -> str:
+            check_api_key(ctx)
+            with get_conn() as conn:
+                row = conn.execute("SELECT 1 FROM tag_blacklist WHERE name = ?", (name,)).fetchone()
+                if not row:
+                    return json.dumps({"error": f"Tag '{name}' is not blacklisted."})
+                conn.execute("DELETE FROM tag_blacklist WHERE name = ?", (name,))
+                conn.execute(
+                    """
+                    INSERT INTO audit_log (action, document_id, actor, details)
+                    VALUES ('mcp_unblacklist_tag', NULL, 'mcp', ?)
+                    """,
+                    (json.dumps({"tag_name": name}),),
+                )
+
+            log.info("tag unblacklisted via MCP", tag_name=name)
+            return json.dumps({"ok": True, "tag_name": name})

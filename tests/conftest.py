@@ -57,7 +57,7 @@ def db_conn(tmp_db: Path) -> Iterator[sqlite3.Connection]:
 @contextmanager
 def _mock_get_conn(db_path: Path) -> Iterator[sqlite3.Connection]:
     """Replacement for app.db.get_conn that uses the test DB."""
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), isolation_level=None)
     conn.row_factory = sqlite3.Row
     try:
         yield conn

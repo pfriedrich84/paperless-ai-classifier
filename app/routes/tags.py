@@ -1,4 +1,4 @@
-"""Tag whitelist management routes."""
+"""Tag whitelist and blacklist management routes."""
 
 from __future__ import annotations
 
@@ -18,11 +18,13 @@ async def tag_list(request: Request):
         rows = conn.execute(
             "SELECT * FROM tag_whitelist ORDER BY approved ASC, times_seen DESC"
         ).fetchall()
+        bl_rows = conn.execute("SELECT * FROM tag_blacklist ORDER BY rejected_at DESC").fetchall()
     tags = [dict(r) for r in rows]
+    blacklist = [dict(r) for r in bl_rows]
     return request.app.state.templates.TemplateResponse(
         request,
         "tags.html",
-        {"tags": tags},
+        {"tags": tags, "blacklist": blacklist},
     )
 
 
@@ -62,13 +64,36 @@ async def approve_tag(request: Request, name: str):
 @router.post("/{name}/reject")
 async def reject_tag(request: Request, name: str):
     with get_conn() as conn:
+        row = conn.execute(
+            "SELECT times_seen FROM tag_whitelist WHERE name = ?", (name,)
+        ).fetchone()
+        times_seen = row["times_seen"] if row else 1
         conn.execute("DELETE FROM tag_whitelist WHERE name = ?", (name,))
+        conn.execute(
+            "INSERT OR REPLACE INTO tag_blacklist (name, times_seen) VALUES (?, ?)",
+            (name, times_seen),
+        )
         conn.execute(
             """
             INSERT INTO audit_log (action, actor, details)
-            VALUES ('tag_reject', 'user', ?)
+            VALUES ('tag_blacklist', 'user', ?)
             """,
-            (f"Tag '{name}' rejected and removed from whitelist",),
+            (f"Tag '{name}' rejected and added to blacklist",),
         )
-    log.info("tag rejected", name=name)
+    log.info("tag blacklisted", name=name)
+    return HTMLResponse("")
+
+
+@router.post("/{name}/unblacklist")
+async def unblacklist_tag(request: Request, name: str):
+    with get_conn() as conn:
+        conn.execute("DELETE FROM tag_blacklist WHERE name = ?", (name,))
+        conn.execute(
+            """
+            INSERT INTO audit_log (action, actor, details)
+            VALUES ('tag_unblacklist', 'user', ?)
+            """,
+            (f"Tag '{name}' removed from blacklist",),
+        )
+    log.info("tag unblacklisted", name=name)
     return HTMLResponse("")

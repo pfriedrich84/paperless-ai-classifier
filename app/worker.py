@@ -78,8 +78,13 @@ def _resolve_tags(
 
 
 def _upsert_tag_whitelist(name: str) -> None:
-    """Insert a new tag proposal or bump its counter."""
+    """Insert a new tag proposal or bump its counter. Skips blacklisted tags."""
     with get_conn() as conn:
+        bl = conn.execute("SELECT 1 FROM tag_blacklist WHERE name = ?", (name,)).fetchone()
+        if bl:
+            log.debug("tag blacklisted, skipping", tag=name)
+            return
+
         row = conn.execute(
             "SELECT times_seen FROM tag_whitelist WHERE name = ?", (name,)
         ).fetchone()

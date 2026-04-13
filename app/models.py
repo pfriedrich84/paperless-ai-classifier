@@ -109,6 +109,13 @@ class TagWhitelistEntry(BaseModel):
     notes: str | None = None
 
 
+class TagBlacklistEntry(BaseModel):
+    name: str
+    rejected_at: str
+    times_seen: int = 1
+    notes: str | None = None
+
+
 # =============================================================================
 # Review form payload from the GUI
 # =============================================================================

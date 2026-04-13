@@ -131,13 +131,13 @@ app/
     entities.py        Entity-Tools (correspondents, doctypes, tags, storage_paths)
     classify.py        KI-Tools (classify_document, find_similar)
     suggestions.py     Suggestion-Tools (list, get, approve, reject)
-    tags.py            Tag-Whitelist-Tools (list_proposals, approve)
+    tags.py            Tag-Whitelist- und Blacklist-Tools (list_proposals, approve, list_blacklisted, unblacklist)
     system.py          Status/Health-Tool
     resources.py       MCP Resources (inbox, pending suggestions)
   routes/
     index.py           Dashboard / Startseite
     review.py          Review-Queue + Detail + Annehmen/Ablehnen
-    tags.py            Tag-Whitelist-Management
+    tags.py            Tag-Whitelist- und Blacklist-Management
     ocr.py             OCR-Korrektur-Vorschlaege (optional)
     errors.py          Fehlerliste + Retry
     stats.py           Counters, Graphen
@@ -313,7 +313,7 @@ Embedding trotzdem indexiert (falls vorhanden).
 ## Wichtige Invarianten
 
 1. **Idempotenz:** Ein Dokument wird pro `updated_at`-Timestamp nur einmal verarbeitet. `processed_documents`-Tabelle haelt State.
-2. **Tag-Whitelist-Gate:** `tags`-Updates in Paperless passieren NUR mit IDs, die in der Whitelist stehen. Neue vom LLM vorgeschlagene Tags landen in `tag_proposals` mit Status `pending`.
+2. **Tag-Whitelist-Gate:** `tags`-Updates in Paperless passieren NUR mit IDs, die in der Whitelist stehen. Neue vom LLM vorgeschlagene Tags landen in `tag_whitelist` mit Status `pending`. Abgelehnte Tags werden in `tag_blacklist` verschoben und bei zukuenftigen Vorschlaegen automatisch ignoriert.
 3. **Confidence-Gate:** Nur wenn `AUTO_COMMIT_CONFIDENCE > 0` UND das LLM einen Score darueber meldet wird ohne Review committed.
 4. **Read-Only bei Fehler:** Wenn Paperless oder Ollama nicht erreichbar sind, wird ein Error-Record geschrieben und der Worker macht weiter. Keine Pipeline-Level-Retries im selben Lauf. Ausnahme: `OllamaClient.embed()` hat HTTP-Level-Retries mit Truncation bei Context-Length-Fehlern und Backoff bei transienten 5xx (konfigurierbar via `OLLAMA_EMBED_RETRIES`).
 5. **Inbox-Tag bleibt:** Standardmaessig (`KEEP_INBOX_TAG=true`) wird der `Posteingang`-Tag nach Commit NICHT entfernt. Nur mit `KEEP_INBOX_TAG=false` wird er beim Commit entfernt.
@@ -403,12 +403,12 @@ MCP_TRANSPORT=sse MCP_PORT=3001 python -m app.mcp_server
 - `search_documents`, `get_document`, `list_inbox`
 - `list_correspondents`, `list_document_types`, `list_tags`, `list_storage_paths`
 - `list_suggestions`, `get_suggestion`
-- `list_tag_proposals`
+- `list_tag_proposals`, `list_blacklisted_tags`
 - `classify_document` (rate-limited), `find_similar_documents`
 - `get_status`
 
 **Tools (write, opt-in via MCP_ENABLE_WRITE=true):**
-- `update_document`, `approve_suggestion`, `reject_suggestion`, `approve_tag`
+- `update_document`, `approve_suggestion`, `reject_suggestion`, `approve_tag`, `unblacklist_tag`
 
 **Resources:**
 - `paperless://suggestions/pending` — Offene Vorschlaege

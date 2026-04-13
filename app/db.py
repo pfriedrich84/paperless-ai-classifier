@@ -78,6 +78,16 @@ CREATE TABLE IF NOT EXISTS tag_whitelist (
 );
 
 -- =========================================================================
+-- Tag blacklist - rejected tags are stored here to prevent re-proposal
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS tag_blacklist (
+    name         TEXT PRIMARY KEY,
+    rejected_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    times_seen   INTEGER NOT NULL DEFAULT 1,
+    notes        TEXT
+);
+
+-- =========================================================================
 -- Error log
 -- =========================================================================
 CREATE TABLE IF NOT EXISTS errors (
