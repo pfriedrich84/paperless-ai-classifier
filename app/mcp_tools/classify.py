@@ -56,7 +56,7 @@ def register(mcp: FastMCP) -> None:
         log.info("MCP classify_document", doc_id=document_id)
 
         # Optional OCR correction
-        text, num_corrections = await maybe_correct_ocr(doc, deps.ollama)
+        text, num_corrections = await maybe_correct_ocr(doc, deps.ollama, deps.paperless)
         if num_corrections > 0:
             doc = doc.model_copy(update={"content": text})
 

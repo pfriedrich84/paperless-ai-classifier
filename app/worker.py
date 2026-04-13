@@ -25,7 +25,7 @@ from app.models import (
 from app.pipeline import classifier, context_builder
 from app.pipeline.committer import commit_suggestion
 from app.pipeline.context_builder import SimilarDocument
-from app.pipeline.ocr_correction import maybe_correct_ocr
+from app.pipeline.ocr_correction import cache_ocr_correction, effective_ocr_mode, maybe_correct_ocr
 from app.telegram_handler import notify_suggestion
 
 log = structlog.get_logger(__name__)
@@ -258,10 +258,12 @@ async def _process_document(
     log.info("processing document", doc_id=doc_id, title=doc.title[:80])
     _mark_pending(doc)
 
-    # Optional OCR correction (modifies content in-memory only)
-    text, num_corrections = await maybe_correct_ocr(doc, ollama)
+    # Optional OCR correction (modifies content in-memory only, caches in our DB)
+    ocr_mode = effective_ocr_mode()
+    text, num_corrections = await maybe_correct_ocr(doc, ollama, paperless)
     if num_corrections > 0:
         doc = doc.model_copy(update={"content": text})
+        cache_ocr_correction(doc.id, text, ocr_mode, num_corrections)
 
     # Compute embedding once — reuse for context search and indexing
     embed_result = _EmbeddingResult()
@@ -337,26 +339,32 @@ async def _process_document(
 async def _phase_ocr(
     docs: list[PaperlessDocument],
     ollama: OllamaClient,
+    paperless: PaperlessClient,
 ) -> list[PaperlessDocument]:
-    """Phase 1: Run OCR correction on all documents (chat model).
+    """Phase 1: Run OCR correction on all documents.
 
     Returns updated document list (content modified in-memory where needed).
+    Corrected text is cached in ``doc_ocr_cache`` (never sent to Paperless).
     """
-    if not settings.enable_ocr_correction:
+    ocr_mode = effective_ocr_mode()
+    if ocr_mode == "off":
         return docs
 
-    log.info("phase ocr started", count=len(docs))
+    log.info("phase ocr started", count=len(docs), mode=ocr_mode)
     corrected: list[PaperlessDocument] = []
     for doc in docs:
         try:
-            text, num_corrections = await maybe_correct_ocr(doc, ollama)
+            text, num_corrections = await maybe_correct_ocr(doc, ollama, paperless)
             if num_corrections > 0:
                 doc = doc.model_copy(update={"content": text})
+                cache_ocr_correction(doc.id, text, ocr_mode, num_corrections)
         except Exception as exc:
             log.warning("ocr correction failed", doc_id=doc.id, error=str(exc))
         corrected.append(doc)
 
-    await ollama.unload_model(ollama.ocr_model)
+    # Unload the OCR model from VRAM if we used a separate one
+    if ocr_mode == "text":
+        await ollama.unload_model(ollama.ocr_model)
     return corrected
 
 
@@ -549,8 +557,8 @@ async def poll_inbox() -> None:
         )
         return
 
-    # --- Phase 1: OCR correction (chat model, optional) ---
-    batch = await _phase_ocr(batch, _ollama)
+    # --- Phase 1: OCR correction (optional, mode-dependent) ---
+    batch = await _phase_ocr(batch, _ollama, _paperless)
 
     # --- Phase 2: Embedding + context search (embed model) ---
     embed_results = await _phase_embed(batch, _paperless, _ollama)

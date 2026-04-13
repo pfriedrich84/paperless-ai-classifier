@@ -113,6 +113,50 @@ class OllamaClient:
             raise ValueError(f"Invalid JSON from Ollama: {content[:200]}") from None
 
     # ---------------------------------------------------------------
+    # Chat with vision (JSON mode)
+    # ---------------------------------------------------------------
+    async def chat_vision_json(
+        self,
+        system: str,
+        user: str,
+        images: list[str],
+        *,
+        model: str | None = None,
+        temperature: float = 0.1,
+    ) -> dict[str, Any]:
+        """Call Ollama chat with images and format=json, then parse the response.
+
+        *images* must be a list of base64-encoded image strings (no data URI prefix).
+        """
+        payload = {
+            "model": model or self.model,
+            "format": "json",
+            "stream": False,
+            "options": {"temperature": temperature, "num_ctx": settings.ollama_num_ctx},
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user, "images": images},
+            ],
+        }
+        r = await self._client.post("/api/chat", json=payload)
+        r.raise_for_status()
+        data = r.json()
+        content = data.get("message", {}).get("content", "")
+        if not content:
+            raise ValueError("Ollama returned empty content")
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            stripped = _strip_markdown_fences(content)
+            if stripped != content:
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError:
+                    pass
+            log.error("ollama vision returned invalid json", content=content[:500])
+            raise ValueError(f"Invalid JSON from Ollama vision: {content[:200]}") from None
+
+    # ---------------------------------------------------------------
     # Embeddings
     # ---------------------------------------------------------------
     @staticmethod

@@ -75,6 +75,20 @@ class PaperlessClient:
         r.raise_for_status()
         log.info("document patched", id=document_id, fields=list(fields.keys()))
 
+    async def download_document(self, document_id: int) -> tuple[bytes, str]:
+        """Download the original document file (PDF/image).
+
+        Returns ``(file_bytes, content_type)``.
+        """
+        r = await self._client.get(
+            f"/documents/{document_id}/download/",
+            timeout=120.0,
+        )
+        r.raise_for_status()
+        content_type = r.headers.get("content-type", "application/octet-stream")
+        log.info("document downloaded", id=document_id, size=len(r.content), ct=content_type)
+        return r.content, content_type
+
     async def search_documents(
         self,
         query: str | None = None,

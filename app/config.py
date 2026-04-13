@@ -34,12 +34,18 @@ class Settings(BaseSettings):
     ollama_embed_retry_base_delay: float = 1.0
     ollama_num_ctx: int = 8192
 
+    # --- OCR ---
+    ocr_mode: str = "off"  # off | text | vision_light | vision_full
+    ocr_vision_model: str = ""  # empty = use ollama_model (must be vision-capable)
+    ocr_vision_max_pages: int = 3
+    ocr_vision_dpi: int = 150
+
     # --- Worker ---
     poll_interval_seconds: int = 300
     context_max_docs: int = 5
     max_doc_chars: int = 8000
     auto_commit_confidence: int = 0  # 0 = immer manuell reviewen
-    enable_ocr_correction: bool = False
+    enable_ocr_correction: bool = False  # deprecated, use ocr_mode instead
 
     # --- GUI ---
     gui_port: int = 8088
@@ -166,9 +172,32 @@ FIELD_META: dict[str, dict[str, Any]] = {
     ),
     "ollama_ocr_model": _fm(
         "Ollama",
-        "OCR Model",
+        "OCR Text Model",
         restart="component",
-        help="Smaller model for OCR correction (only used when OCR correction is enabled)",
+        help="Smaller model for text-only OCR correction (ocr_mode=text)",
+    ),
+    "ocr_mode": _fm(
+        "OCR",
+        "OCR Mode",
+        help="off | text | vision_light | vision_full",
+    ),
+    "ocr_vision_model": _fm(
+        "OCR",
+        "Vision Model",
+        restart="component",
+        help="Ollama model for vision OCR (empty = use Chat Model)",
+    ),
+    "ocr_vision_max_pages": _fm(
+        "OCR",
+        "Vision Max Pages",
+        "number",
+        help="Max document pages to process with vision model",
+    ),
+    "ocr_vision_dpi": _fm(
+        "OCR",
+        "Vision DPI",
+        "number",
+        help="Render resolution for PDF pages (pixels per inch)",
     ),
     "ollama_timeout_seconds": _fm(
         "Ollama",
@@ -211,9 +240,9 @@ FIELD_META: dict[str, dict[str, Any]] = {
     ),
     "enable_ocr_correction": _fm(
         "Worker",
-        "Enable OCR Correction",
+        "Enable OCR Correction (deprecated)",
         "bool",
-        help="Run LLM-based OCR correction before classification",
+        help="Deprecated: use OCR_MODE=text instead. Kept for backwards compatibility.",
     ),
     # --- GUI ---
     "gui_port": _fm("GUI", "Port", "number", restart="app", help="Web UI port (requires restart)"),

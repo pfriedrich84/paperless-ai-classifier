@@ -87,7 +87,7 @@ Der Kontext allein genuegt nicht — zusaetzlich greifen mehrere Sicherheitsnetz
 
 ## Nicht-Ziele
 
-- **Kein Re-OCR** der Dokumente. Wir nutzen nur den Volltext, den Paperless bereits extrahiert hat.
+- **Kein Re-OCR durch Paperless.** Wir nutzen den Volltext, den Paperless bereits extrahiert hat, als Basis. Optional kann ein Vision-LLM die OCR-Qualitaet verbessern, indem es den Text gegen die Originaldokument-Bilder vergleicht (konfigurierbar via `OCR_MODE`). Korrigierter Text wird nur lokal in `doc_ocr_cache` gespeichert, nie zurueck nach Paperless geschrieben.
 - **Keine Content-Modifikation.** Wir aendern nur Metadaten.
 - **Keine Auto-Tag-Erstellung.** Neue Tags, die das LLM vorschlaegt, muessen explizit in der Whitelist freigegeben werden.
 - **Keine Multi-User-Auth.** Single-Deployment, optional Basic-Auth-Schutz.
@@ -158,6 +158,7 @@ entrypoint.sh            Startet Uvicorn + optional MCP-Server (ENABLE_MCP=true)
 - `GET /api/document_types/` → Liste fuer Whitelist-Matching
 - `GET /api/tags/` → Liste fuer Whitelist-Matching
 - `GET /api/storage_paths/` → Liste
+- `GET /api/documents/<id>/download/` → Original-Datei herunterladen (PDF/Bild, fuer Vision-OCR)
 - `PATCH /api/documents/<id>/` → Metadaten-Update
 - `POST /api/tags/` → Nur nach expliziter Whitelist-Freigabe
 
@@ -165,7 +166,7 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 
 ## Ollama-Reference
 
-- `POST /api/chat` mit `format: "json"` → strukturierte JSON-Antwort
+- `POST /api/chat` mit `format: "json"` → strukturierte JSON-Antwort. Unterstuetzt auch `images`-Feld fuer Vision-Modelle (base64-encoded, kein Data-URI-Prefix).
 - `POST /api/embeddings` → Vektor fuer Similarity-Suche (Default: `nomic-embed-text-v2-moe`, multilingual DE/EN). Bei Context-Length-Fehlern (500) wird der Text progressiv um 25% gekuerzt und erneut gesendet. Transiente 5xx/429-Fehler werden mit exponentiellem Backoff wiederholt. Konfigurierbar via `OLLAMA_EMBED_RETRIES` (Default: 3) und `OLLAMA_EMBED_RETRY_BASE_DELAY` (Default: 1.0s).
 - `POST /api/generate` mit `keep_alive: 0` → Modell aus VRAM entladen (genutzt zwischen Pipeline-Phasen)
 - `GET /api/tags` → Healthcheck + Modell-Liste
@@ -175,8 +176,28 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 | Modell | Zweck | Konfiguration |
 |--------|-------|---------------|
 | `nomic-embed-text-v2-moe` | Embedding-Similarity-Suche | `OLLAMA_EMBED_MODEL` |
-| `gemma3:4b` | Klassifikation (Titel, Datum, etc.) | `OLLAMA_MODEL` |
-| `gemma3:1b` | OCR-Korrektur (optional, kleiner/schneller) | `OLLAMA_OCR_MODEL` |
+| `gemma4:e2b` | Klassifikation + Vision-OCR (Titel, Datum, etc.) | `OLLAMA_MODEL` |
+| `gemma3:1b` | Text-Only OCR-Korrektur (optional, kleiner/schneller) | `OLLAMA_OCR_MODEL` |
+
+## OCR-Korrektur (Vision-LLM)
+
+Konfigurierbar via `OCR_MODE` mit vier Stufen:
+
+| Modus | Beschreibung | Heuristik? | Kosten |
+|-------|-------------|------------|--------|
+| `off` | Keine OCR-Korrektur (Default) | -- | Keine |
+| `text` | Text-only LLM-Korrektur | Ja | 1 LLM-Call |
+| `vision_light` | Bild + OCR-Text vergleichen | Ja | 1 Download + N Vision-Calls |
+| `vision_full` | Seite-fuer-Seite Korrektur | **Nein** (laeuft immer) | 1 Download + N Vision-Calls |
+
+**Zusaetzliche Einstellungen:**
+- `OCR_VISION_MODEL` — Vision-Modell (leer = `OLLAMA_MODEL`). Muss vision-faehig sein.
+- `OCR_VISION_MAX_PAGES` — Max Seiten fuer Vision (Default: 3). Gilt fuer `vision_light` und `vision_full`.
+- `OCR_VISION_DPI` — Render-Aufloesung fuer PDF-Seiten (Default: 150).
+
+**Wichtig:** Korrigierter Text wird **nie** zurueck nach Paperless geschrieben. Er wird nur lokal in `doc_ocr_cache` gespeichert und fuer Klassifikation + Embedding-Kontext genutzt. `batch_correct_documents()` erlaubt OCR-Korrektur ueber bereits indexierte Dokumente.
+
+**Graceful Degradation:** `vision_full` → `vision_light` → `text` → `off`. Jede Stufe faengt Fehler ab und faellt auf die naechst niedrigere zurueck.
 
 ## Worker-Pipeline (Phasen-Ablauf)
 

@@ -289,14 +289,15 @@ class TestPhaseOcr:
         mock_ollama = AsyncMock()
         mock_ollama.ocr_model = "gemma3:1b"
         mock_ollama.unload_model = AsyncMock()
+        mock_paperless = AsyncMock()
 
         with (
-            patch("app.worker.settings") as mock_settings,
+            patch("app.worker.effective_ocr_mode", return_value="text"),
             patch("app.worker.maybe_correct_ocr") as mock_ocr,
+            patch("app.worker.cache_ocr_correction"),
         ):
-            mock_settings.enable_ocr_correction = True
             mock_ocr.return_value = ("fixed text", 3)
-            result = await _phase_ocr([doc], mock_ollama)
+            result = await _phase_ocr([doc], mock_ollama, mock_paperless)
 
         assert result[0].content == "fixed text"
         mock_ollama.unload_model.assert_called_once_with("gemma3:1b")
@@ -307,10 +308,10 @@ class TestPhaseOcr:
         docs = [_make_doc(1), _make_doc(2)]
         mock_ollama = AsyncMock()
         mock_ollama.unload_model = AsyncMock()
+        mock_paperless = AsyncMock()
 
-        with patch("app.worker.settings") as mock_settings:
-            mock_settings.enable_ocr_correction = False
-            result = await _phase_ocr(docs, mock_ollama)
+        with patch("app.worker.effective_ocr_mode", return_value="off"):
+            result = await _phase_ocr(docs, mock_ollama, mock_paperless)
 
         assert result == docs
         mock_ollama.unload_model.assert_not_called()
@@ -322,13 +323,13 @@ class TestPhaseOcr:
         mock_ollama = AsyncMock()
         mock_ollama.ocr_model = "gemma3:1b"
         mock_ollama.unload_model = AsyncMock()
+        mock_paperless = AsyncMock()
 
         with (
-            patch("app.worker.settings") as mock_settings,
+            patch("app.worker.effective_ocr_mode", return_value="text"),
             patch("app.worker.maybe_correct_ocr", side_effect=RuntimeError("fail")),
         ):
-            mock_settings.enable_ocr_correction = True
-            result = await _phase_ocr([doc], mock_ollama)
+            result = await _phase_ocr([doc], mock_ollama, mock_paperless)
 
         assert result[0].content == "original text"
 

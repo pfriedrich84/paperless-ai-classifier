@@ -108,6 +108,17 @@ CREATE TABLE IF NOT EXISTS doc_embedding_meta (
 );
 
 -- =========================================================================
+-- OCR correction cache (corrected text stored locally, NOT in Paperless)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS doc_ocr_cache (
+    document_id      INTEGER PRIMARY KEY,
+    corrected_content TEXT NOT NULL,
+    ocr_mode         TEXT NOT NULL,        -- text | vision_light | vision_full
+    num_corrections  INTEGER NOT NULL DEFAULT 0,
+    corrected_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- =========================================================================
 -- Audit log
 -- =========================================================================
 CREATE TABLE IF NOT EXISTS audit_log (
