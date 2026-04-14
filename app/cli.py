@@ -56,7 +56,7 @@ async def cmd_reindex() -> None:
 
 
 async def cmd_reindex_ocr() -> None:
-    """Run OCR correction on all indexed documents (respects OCR_MODE)."""
+    """Run OCR correction on all Paperless documents (respects OCR_MODE)."""
     from app.pipeline.ocr_correction import batch_correct_documents, effective_ocr_mode
 
     mode = effective_ocr_mode()

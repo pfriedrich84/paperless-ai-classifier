@@ -230,7 +230,7 @@ Konfigurierbar via `OCR_MODE` mit vier Stufen:
 - `OCR_VISION_DPI` — Render-Aufloesung fuer PDF-Seiten (Default: 150).
 - `OLLAMA_OCR_NUM_CTX` — Kontextfenster fuer OCR-Modelle (Default: 131072 = 128K). Vision-OCR benoetigt ~1536 Tokens pro Seite fuer Bilder, daher deutlich hoeher als `OLLAMA_NUM_CTX`.
 
-**Wichtig:** Korrigierter Text wird **nie** zurueck nach Paperless geschrieben. Er wird nur lokal in `doc_ocr_cache` gespeichert und fuer Klassifikation + Embedding-Kontext genutzt. `batch_correct_documents()` erlaubt OCR-Korrektur ueber bereits indexierte Dokumente.
+**Wichtig:** Korrigierter Text wird **nie** zurueck nach Paperless geschrieben. Er wird nur lokal in `doc_ocr_cache` gespeichert und fuer Klassifikation + Embedding-Kontext genutzt. `batch_correct_documents()` erlaubt OCR-Korrektur ueber alle Paperless-Dokumente.
 
 **Graceful Degradation:** `vision_full` → `vision_light` → `text` → `off`. Jede Stufe faengt Fehler ab und faellt auf die naechst niedrigere zurueck.
 
