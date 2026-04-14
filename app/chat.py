@@ -13,6 +13,7 @@ from pathlib import Path
 
 import structlog
 
+from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
@@ -90,15 +91,16 @@ async def ask(
     session: ChatSession,
     paperless: PaperlessClient,
     ollama: OllamaClient,
+    meili: MeiliClient,
 ) -> ChatResult:
-    """Full RAG pipeline: embed -> KNN -> format context -> LLM -> answer.
+    """Full RAG pipeline: embed -> hybrid search -> format context -> LLM -> answer.
 
     Appends the plain Q&A to *session.messages* (not the context-augmented
     prompt) so history stays compact.
     """
-    # 1. Find similar documents
+    # 1. Find similar documents via hybrid search (BM25 + vector)
     similar = await find_similar_by_query_text(
-        question, paperless, ollama, limit=settings.context_max_docs
+        question, paperless, ollama, meili, limit=settings.context_max_docs
     )
 
     # 2. Build context block

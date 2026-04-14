@@ -20,10 +20,11 @@ from pathlib import Path
 
 import structlog
 
+from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
-from app.db import init_db
+from app.db import EMBED_DIM, init_db
 
 
 def _configure_logging() -> None:
@@ -51,10 +52,13 @@ async def cmd_reindex() -> None:
 
     paperless = PaperlessClient()
     ollama = OllamaClient()
+    meili = MeiliClient()
     try:
-        count = await reindex_all(paperless, ollama)
+        await meili.ensure_index(EMBED_DIM)
+        count = await reindex_all(paperless, ollama, meili)
         print(f"Reindex complete: {count} documents indexed.")
     finally:
+        await meili.aclose()
         await paperless.aclose()
         await ollama.aclose()
 
@@ -83,6 +87,10 @@ async def cmd_reindex_embed() -> None:
     from app.db import get_conn
     from app.indexer import initial_index
 
+    meili = MeiliClient()
+    await meili.ensure_index(EMBED_DIM)
+    await meili.delete_all_documents()
+
     # Clear existing embeddings
     with get_conn() as conn:
         conn.execute("DELETE FROM doc_embedding_meta")
@@ -92,9 +100,10 @@ async def cmd_reindex_embed() -> None:
     paperless = PaperlessClient()
     ollama = OllamaClient()
     try:
-        count = await initial_index(paperless, ollama)
+        count = await initial_index(paperless, ollama, meili)
         print(f"Embedding complete: {count} documents indexed.")
     finally:
+        await meili.aclose()
         await paperless.aclose()
         await ollama.aclose()
 
@@ -105,17 +114,21 @@ async def cmd_poll() -> None:
 
     paperless = PaperlessClient()
     ollama = OllamaClient()
+    meili = MeiliClient()
 
     # The worker needs module-level client refs — set them via start_scheduler's pattern
     import app.worker as worker
 
     worker._paperless = paperless
     worker._ollama = ollama
+    worker._meili = meili
 
     try:
+        await meili.ensure_index(EMBED_DIM)
         await poll_inbox()
         print("Inbox processing complete.")
     finally:
+        await meili.aclose()
         await paperless.aclose()
         await ollama.aclose()
 

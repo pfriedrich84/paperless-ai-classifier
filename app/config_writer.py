@@ -153,6 +153,21 @@ async def apply_runtime_changes(app: Any, changed: dict[str, Any]) -> list[str]:
         app.state.ollama = OllamaClient()
         actions.append("Ollama client recreated")
 
+    # --- Meilisearch client ---
+    meili_fields = {"meilisearch_url", "meilisearch_api_key"}
+    if changed_keys & meili_fields:
+        from app.clients.meilisearch import MeiliClient
+        from app.db import EMBED_DIM
+
+        old = getattr(app.state, "meili", None)
+        if old:
+            await old.aclose()
+        meili = MeiliClient()
+        if await meili.ping():
+            await meili.ensure_index(EMBED_DIM)
+        app.state.meili = meili
+        actions.append("Meilisearch client recreated")
+
     # --- Telegram client ---
     telegram_fields = {"enable_telegram", "telegram_bot_token", "telegram_chat_id"}
     if changed_keys & telegram_fields:

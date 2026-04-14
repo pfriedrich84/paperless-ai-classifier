@@ -18,11 +18,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.clients.telegram import TelegramClient
 from app.config import needs_setup, settings
-from app.db import init_db
+from app.db import EMBED_DIM, init_db
 from app.telegram_handler import start_telegram, stop_telegram
 from app.worker import start_scheduler, stop_scheduler
 
@@ -201,6 +202,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.info("essential config missing — entering setup mode")
         app.state.paperless = None
         app.state.ollama = None
+        app.state.meili = None
         app.state.telegram = None
         yield
         log.info("shutdown complete (setup mode)")
@@ -208,9 +210,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     paperless = PaperlessClient()
     ollama = OllamaClient()
+    meili = MeiliClient()
     telegram = TelegramClient()
     app.state.paperless = paperless
     app.state.ollama = ollama
+    app.state.meili = meili
     app.state.telegram = telegram
 
     # Healthchecks — warning only, don't fail startup
@@ -218,13 +222,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.warning("paperless not reachable at startup")
     if not await ollama.ping():
         log.warning("ollama not reachable at startup")
+    if await meili.ping():
+        await meili.ensure_index(EMBED_DIM)
+    else:
+        log.warning("meilisearch not reachable at startup")
 
     start_scheduler(app)
-    start_telegram(telegram, paperless, ollama)
+    start_telegram(telegram, paperless, ollama, meili)
     yield
     stop_telegram()
     stop_scheduler(app)
     await telegram.aclose()
+    await meili.aclose()
     await paperless.aclose()
     await ollama.aclose()
     log.info("shutdown complete")

@@ -62,7 +62,7 @@ def register(mcp: FastMCP) -> None:
 
         # Find similar documents for context
         context_docs = await context_builder.find_similar_documents(
-            doc, deps.paperless, deps.ollama
+            doc, deps.paperless, deps.ollama, deps.meili
         )
 
         # Fetch entity lists
@@ -82,7 +82,7 @@ def register(mcp: FastMCP) -> None:
         )
 
         # Index for future context
-        await context_builder.index_document(doc, deps.ollama)
+        await context_builder.index_document(doc, deps.ollama, deps.meili)
 
         log.info(
             "MCP classification complete",
@@ -126,7 +126,7 @@ def register(mcp: FastMCP) -> None:
 
         doc = await deps.paperless.get_document(document_id)
         similar = await context_builder.find_similar_documents(
-            doc, deps.paperless, deps.ollama, limit=limit
+            doc, deps.paperless, deps.ollama, deps.meili, limit=limit
         )
 
         results = []

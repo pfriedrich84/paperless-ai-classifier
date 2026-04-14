@@ -244,6 +244,7 @@ async def reprocess_document(request: Request, document_id: int):
 
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
+    meili = request.app.state.meili
     paperless_url = settings.paperless_url.rstrip("/")
 
     # Clear previous processing state + old pending suggestions
@@ -306,6 +307,7 @@ async def reprocess_document(request: Request, document_id: int):
                 doc,
                 paperless,
                 ollama,
+                meili,
                 correspondents,
                 doctypes,
                 storage_paths,
@@ -356,6 +358,7 @@ async def process_inbox_bulk(request: Request):
 
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
+    meili_ref = request.app.state.meili
 
     try:
         docs = await paperless.list_inbox_documents(settings.paperless_inbox_tag_id)
@@ -403,6 +406,7 @@ async def process_inbox_bulk(request: Request):
                         doc,
                         paperless,
                         ollama,
+                        meili_ref,
                         correspondents,
                         doctypes,
                         storage_paths,
@@ -438,6 +442,7 @@ async def process_all_docs(request: Request):
 
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
+    meili_all = request.app.state.meili
 
     try:
         docs = await paperless.list_all_documents()
@@ -489,6 +494,7 @@ async def process_all_docs(request: Request):
                         doc,
                         paperless,
                         ollama,
+                        meili_all,
                         correspondents,
                         doctypes,
                         storage_paths,

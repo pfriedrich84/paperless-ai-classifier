@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
     telegram_poll_interval: int = 5  # seconds between getUpdates calls
 
+    # --- Meilisearch ---
+    meilisearch_url: str = "http://localhost:7700"
+    meilisearch_api_key: str = ""
+    meilisearch_hybrid_ratio: float = 0.5  # 0.0=keyword only, 1.0=semantic only
+
     # --- Webhook ---
     webhook_secret: str = ""  # if set, POST /webhook/paperless requires this token
 
@@ -381,6 +386,28 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Poll Interval (seconds)",
         "number",
         help="Seconds between Telegram getUpdates calls",
+    ),
+    # --- Meilisearch ---
+    "meilisearch_url": _fm(
+        "Meilisearch",
+        "Meilisearch URL",
+        "url",
+        restart="component",
+        help="Base URL of the Meilisearch instance",
+    ),
+    "meilisearch_api_key": _fm(
+        "Meilisearch",
+        "API Key",
+        "password",
+        restart="component",
+        help="Meilisearch master key for authentication",
+        sensitive=True,
+    ),
+    "meilisearch_hybrid_ratio": _fm(
+        "Meilisearch",
+        "Hybrid Ratio",
+        "number",
+        help="Blend ratio for search: 0.0 = keyword only, 0.5 = balanced, 1.0 = semantic only",
     ),
     # --- Webhook ---
     "webhook_secret": _fm(

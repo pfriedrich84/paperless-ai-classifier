@@ -11,6 +11,7 @@ from typing import Literal
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
@@ -36,6 +37,7 @@ ProcessResult = Literal["skipped", "classified", "auto_committed"]
 # Module-level refs set by start_scheduler
 _paperless: PaperlessClient | None = None
 _ollama: OllamaClient | None = None
+_meili: MeiliClient | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +349,7 @@ async def _process_document(
     doc: PaperlessDocument,
     paperless: PaperlessClient,
     ollama: OllamaClient,
+    meili: MeiliClient,
     correspondents: list[PaperlessEntity],
     doctypes: list[PaperlessEntity],
     storage_paths: list[PaperlessEntity],
@@ -380,7 +383,9 @@ async def _process_document(
             vec = await ollama.embed(summary)
             embed_result.embedding = vec
             embed_result.similar_results = (
-                await context_builder.find_similar_with_precomputed_embedding(doc, vec, paperless)
+                await context_builder.find_similar_with_precomputed_embedding(
+                    doc, vec, paperless, meili
+                )
             )
         except Exception as exc:
             log.warning("embedding failed", doc_id=doc_id, error=str(exc))
@@ -435,7 +440,10 @@ async def _process_document(
 
     # Index using pre-computed embedding (no second Ollama call)
     if embed_result.embedding is not None:
-        context_builder.store_embedding(doc, embed_result.embedding)
+        try:
+            await context_builder.store_embedding(doc, embed_result.embedding, meili)
+        except Exception as exc:
+            log.warning("indexing failed", doc_id=doc.id, error=str(exc))
 
     return "auto_committed" if will_auto_commit else "classified"
 
@@ -483,6 +491,7 @@ async def _phase_embed(
     docs: list[PaperlessDocument],
     paperless: PaperlessClient,
     ollama: OllamaClient,
+    meili: MeiliClient,
 ) -> dict[int, _EmbeddingResult]:
     """Phase 2: Compute embeddings and find similar documents (embed model).
 
@@ -503,7 +512,7 @@ async def _phase_embed(
                 vec = await ollama.embed(summary)
                 er.embedding = vec
                 er.similar_results = await context_builder.find_similar_with_precomputed_embedding(
-                    doc, vec, paperless
+                    doc, vec, paperless, meili
                 )
             except Exception as exc:
                 log.warning("embedding failed", doc_id=doc.id, error=str(exc))
@@ -518,6 +527,7 @@ async def _phase_classify(
     embed_results: dict[int, _EmbeddingResult],
     paperless: PaperlessClient,
     ollama: OllamaClient,
+    meili: MeiliClient,
     correspondents: list[PaperlessEntity],
     doctypes: list[PaperlessEntity],
     storage_paths: list[PaperlessEntity],
@@ -603,7 +613,7 @@ async def _phase_classify(
         # Index pre-computed embedding regardless of classification outcome
         if er.embedding is not None:
             try:
-                context_builder.store_embedding(doc, er.embedding)
+                await context_builder.store_embedding(doc, er.embedding, meili)
             except Exception as exc:
                 log.warning("indexing failed", doc_id=doc.id, error=str(exc))
 
@@ -625,7 +635,7 @@ async def poll_inbox() -> None:
 
     Each phase unloads its model from VRAM before the next phase begins.
     """
-    if _paperless is None or _ollama is None:
+    if _paperless is None or _ollama is None or _meili is None:
         log.error("worker not initialised — skipping poll")
         return
 
@@ -697,7 +707,7 @@ async def poll_inbox() -> None:
     if _poll_progress.cancelled:
         log.info("poll cancelled before embed phase")
         return
-    embed_results = await _phase_embed(batch, _paperless, _ollama)
+    embed_results = await _phase_embed(batch, _paperless, _ollama, _meili)
 
     # --- Phase 3: Classification + post-processing (chat model) ---
     _poll_progress.phase = "classify"
@@ -709,6 +719,7 @@ async def poll_inbox() -> None:
         embed_results,
         _paperless,
         _ollama,
+        _meili,
         correspondents,
         doctypes,
         storage_paths,
@@ -757,10 +768,11 @@ async def _scheduled_poll() -> None:
 
 def start_scheduler(app: object) -> None:
     """Initialise and start the APScheduler."""
-    global _paperless, _ollama
+    global _paperless, _ollama, _meili
 
     _paperless = getattr(app, "state", app).paperless  # type: ignore[union-attr]
     _ollama = getattr(app, "state", app).ollama  # type: ignore[union-attr]
+    _meili = getattr(app, "state", app).meili  # type: ignore[union-attr]
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(

@@ -1,16 +1,16 @@
-"""Build LLM context from similar existing documents via sqlite-vec."""
+"""Build LLM context from similar existing documents via Meilisearch hybrid search."""
 
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass
 
 import structlog
 
+from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
-from app.db import EMBED_DIM, get_conn
+from app.db import get_conn
 from app.models import PaperlessDocument
 
 
@@ -23,13 +23,6 @@ class SimilarDocument:
 
 
 log = structlog.get_logger(__name__)
-
-
-def _serialize_embedding(vec: list[float]) -> bytes:
-    """Serialize a float list to the little-endian f32 blob sqlite-vec expects."""
-    if len(vec) != EMBED_DIM:
-        raise ValueError(f"embedding dim mismatch: got {len(vec)}, expected {EMBED_DIM}")
-    return struct.pack(f"{EMBED_DIM}f", *vec)
 
 
 def document_summary(doc: PaperlessDocument) -> str:
@@ -46,23 +39,33 @@ def document_summary(doc: PaperlessDocument) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Embedding storage (no Ollama call needed)
+# Embedding storage
 # ---------------------------------------------------------------------------
-def store_embedding(doc: PaperlessDocument, embedding: list[float]) -> None:
+async def store_embedding(
+    doc: PaperlessDocument,
+    embedding: list[float],
+    meili: MeiliClient,
+) -> None:
     """Persist a pre-computed embedding for a document.
 
-    Writes to both ``doc_embeddings`` (vector) and ``doc_embedding_meta``
-    (metadata for cache invalidation).  Does **not** call Ollama.
+    Writes to Meilisearch (vector + full text for hybrid search) and to
+    ``doc_embedding_meta`` (metadata cache for the embeddings dashboard).
+    Does **not** call Ollama.
     """
-    blob = _serialize_embedding(embedding)
+    # Meilisearch: store document with embedding for hybrid search
+    await meili.upsert_document(
+        doc_id=doc.id,
+        title=doc.title or "",
+        content=(doc.content or "")[: settings.embed_max_chars],
+        correspondent=doc.correspondent,
+        document_type=doc.document_type,
+        storage_path=doc.storage_path,
+        tags=doc.tags,
+        embedding=embedding,
+    )
+
+    # Metadata cache for embeddings dashboard listing
     with get_conn() as conn:
-        # sqlite-vec vec0 tables don't support INSERT OR REPLACE,
-        # so delete any existing row first.
-        conn.execute("DELETE FROM doc_embeddings WHERE document_id = ?", (doc.id,))
-        conn.execute(
-            "INSERT INTO doc_embeddings(document_id, embedding) VALUES (?, ?)",
-            (doc.id, blob),
-        )
         conn.execute(
             """
             INSERT OR REPLACE INTO doc_embedding_meta
@@ -73,7 +76,11 @@ def store_embedding(doc: PaperlessDocument, embedding: list[float]) -> None:
         )
 
 
-async def index_document(doc: PaperlessDocument, ollama: OllamaClient) -> None:
+async def index_document(
+    doc: PaperlessDocument,
+    ollama: OllamaClient,
+    meili: MeiliClient,
+) -> None:
     """Compute + persist an embedding for a single document."""
     text = document_summary(doc)
     if not text.strip():
@@ -84,7 +91,7 @@ async def index_document(doc: PaperlessDocument, ollama: OllamaClient) -> None:
         log.warning("embedding failed", doc_id=doc.id, error=str(exc))
         return
 
-    store_embedding(doc, vec)
+    await store_embedding(doc, vec, meili)
 
 
 # ---------------------------------------------------------------------------
@@ -94,56 +101,30 @@ async def find_similar_with_precomputed_embedding(
     doc: PaperlessDocument,
     embedding: list[float],
     paperless: PaperlessClient,
+    meili: MeiliClient,
     limit: int | None = None,
 ) -> list[SimilarDocument]:
-    """KNN search using a pre-computed embedding vector.
+    """Vector search using a pre-computed embedding vector.
 
     Like :func:`find_similar_with_distances` but skips the ``ollama.embed()``
     call — useful when the embedding has already been computed (e.g. in a
     batched pipeline that separates embedding and classification phases).
 
-    Documents still in the inbox are excluded (same filtering as
-    :func:`find_similar_with_distances`).
+    Documents still in the inbox are excluded via Meilisearch filter.
     """
     limit = limit or settings.context_max_docs
-    blob = _serialize_embedding(embedding)
     inbox_tag_id = settings.paperless_inbox_tag_id
 
-    # Overfetch to compensate for inbox docs + self that will be filtered out.
-    # sqlite-vec vec0 requires `k = ?` in WHERE for KNN queries;
-    # LIMIT alone is insufficient when other constraints are present.
-    k = limit * 2 + 1
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT document_id, distance
-              FROM doc_embeddings
-             WHERE embedding MATCH ?
-               AND k = ?
-             ORDER BY distance
-            """,
-            (blob, k),
-        ).fetchall()
-
-    # Exclude the source document (vec0 KNN cannot filter by document_id)
-    rows = [r for r in rows if r["document_id"] != doc.id]
-
-    if not rows:
-        return []
+    filter_expr = f"tags NOT IN [{inbox_tag_id}] AND id != {doc.id}"
+    hits = await meili.vector_search(embedding, limit=limit, filter_expr=filter_expr)
 
     similar: list[SimilarDocument] = []
-    for row in rows:
-        if len(similar) >= limit:
-            break
+    for hit in hits:
         try:
-            d = await paperless.get_document(row["document_id"])
-            # Skip docs still in inbox — not yet reviewed/approved
-            if inbox_tag_id in d.tags:
-                log.debug("skipping inbox doc as context", doc_id=d.id)
-                continue
-            similar.append(SimilarDocument(document=d, distance=row["distance"]))
+            d = await paperless.get_document(hit.doc_id)
+            similar.append(SimilarDocument(document=d, distance=1.0 - hit.score))
         except Exception as exc:
-            log.warning("failed to load similar doc", id=row["document_id"], error=str(exc))
+            log.warning("failed to load similar doc", id=hit.doc_id, error=str(exc))
     return similar
 
 
@@ -151,13 +132,13 @@ async def find_similar_with_distances(
     doc: PaperlessDocument,
     paperless: PaperlessClient,
     ollama: OllamaClient,
+    meili: MeiliClient,
     limit: int | None = None,
 ) -> list[SimilarDocument]:
     """Return up to `limit` similar documents with their distance scores.
 
     Documents still in the inbox (carrying the inbox tag) are excluded — they
     have not been reviewed/approved yet and would provide unreliable context.
-    We overfetch from the DB to compensate for filtered-out inbox docs.
     """
     text = document_summary(doc)
     if not text.strip():
@@ -169,13 +150,14 @@ async def find_similar_with_distances(
         log.warning("context embedding failed", doc_id=doc.id, error=str(exc))
         return []
 
-    return await find_similar_with_precomputed_embedding(doc, vec, paperless, limit)
+    return await find_similar_with_precomputed_embedding(doc, vec, paperless, meili, limit)
 
 
 async def find_similar_documents(
     doc: PaperlessDocument,
     paperless: PaperlessClient,
     ollama: OllamaClient,
+    meili: MeiliClient,
     limit: int | None = None,
 ) -> list[PaperlessDocument]:
     """Return up to `limit` already-classified documents most similar to `doc`.
@@ -183,7 +165,7 @@ async def find_similar_documents(
     Convenience wrapper around :func:`find_similar_with_distances` that strips
     distance scores for callers that only need the documents.
     """
-    results = await find_similar_with_distances(doc, paperless, ollama, limit)
+    results = await find_similar_with_distances(doc, paperless, ollama, meili, limit)
     return [r.document for r in results]
 
 
@@ -191,16 +173,17 @@ async def find_similar_by_query_text(
     query_text: str,
     paperless: PaperlessClient,
     ollama: OllamaClient,
+    meili: MeiliClient,
     limit: int | None = None,
 ) -> list[SimilarDocument]:
-    """Embed raw query text and find similar documents via KNN.
+    """Embed raw query text and find similar documents via hybrid search.
 
     Unlike :func:`find_similar_with_distances` which takes a
     :class:`PaperlessDocument`, this accepts free-form text (e.g. a user's
     chat question) and does not exclude a "source" document from results.
 
-    Documents still in the inbox are excluded (same filtering as other
-    similarity functions).
+    Uses Meilisearch hybrid search (BM25 keyword + vector similarity)
+    for better retrieval quality. Documents still in the inbox are excluded.
     """
     if not query_text.strip():
         return []
@@ -212,70 +195,42 @@ async def find_similar_by_query_text(
         log.warning("chat query embedding failed", error=str(exc))
         return []
 
-    blob = _serialize_embedding(vec)
     inbox_tag_id = settings.paperless_inbox_tag_id
+    filter_expr = f"tags NOT IN [{inbox_tag_id}]"
 
-    k = limit * 2
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT document_id, distance
-              FROM doc_embeddings
-             WHERE embedding MATCH ?
-               AND k = ?
-             ORDER BY distance
-            """,
-            (blob, k),
-        ).fetchall()
-
-    if not rows:
-        return []
+    hits = await meili.hybrid_search(
+        query_text,
+        vec,
+        limit=limit,
+        filter_expr=filter_expr,
+        hybrid_ratio=settings.meilisearch_hybrid_ratio,
+    )
 
     similar: list[SimilarDocument] = []
-    for row in rows:
-        if len(similar) >= limit:
-            break
+    for hit in hits:
         try:
-            d = await paperless.get_document(row["document_id"])
-            if inbox_tag_id in d.tags:
-                continue
-            similar.append(SimilarDocument(document=d, distance=row["distance"]))
+            d = await paperless.get_document(hit.doc_id)
+            similar.append(SimilarDocument(document=d, distance=1.0 - hit.score))
         except Exception as exc:
-            log.warning("failed to load similar doc", id=row["document_id"], error=str(exc))
+            log.warning("failed to load similar doc", id=hit.doc_id, error=str(exc))
     return similar
 
 
-def find_similar_by_id(
+async def find_similar_by_id(
     document_id: int,
+    meili: MeiliClient,
     limit: int = 10,
 ) -> list[tuple[int, float]]:
-    """KNN search using a document's already-stored embedding.
+    """Vector search using a document's already-stored embedding.
 
-    Returns ``(doc_id, distance)`` pairs.  Purely local — no Ollama or
-    Paperless API calls required.  Returns an empty list if the document
-    has no embedding.
+    Returns ``(doc_id, distance)`` pairs.  No Ollama or Paperless API calls
+    required (retrieves the stored vector from Meilisearch).
+    Returns an empty list if the document has no embedding.
     """
-    with get_conn() as conn:
-        embedding_row = conn.execute(
-            "SELECT embedding FROM doc_embeddings WHERE document_id = ?",
-            (document_id,),
-        ).fetchone()
-        if embedding_row is None:
-            return []
+    vec = await meili.get_document_vector(document_id)
+    if vec is None:
+        return []
 
-        blob = embedding_row["embedding"]
-        k = limit + 1  # +1 to account for the source doc itself
-        rows = conn.execute(
-            """
-            SELECT document_id, distance
-              FROM doc_embeddings
-             WHERE embedding MATCH ?
-               AND k = ?
-             ORDER BY distance
-            """,
-            (blob, k),
-        ).fetchall()
-
-    return [(r["document_id"], r["distance"]) for r in rows if r["document_id"] != document_id][
-        :limit
-    ]
+    filter_expr = f"id != {document_id}"
+    hits = await meili.vector_search(vec, limit=limit, filter_expr=filter_expr)
+    return [(hit.doc_id, 1.0 - hit.score) for hit in hits]

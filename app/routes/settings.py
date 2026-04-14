@@ -131,8 +131,9 @@ async def trigger_reindex(request: Request):
     log.info("manual reindex triggered")
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
+    meili = request.app.state.meili
 
-    started = start_reindex_task(paperless, ollama)
+    started = start_reindex_task(paperless, ollama, meili)
     if not started:
         return HTMLResponse(
             '<div class="text-amber-600 text-sm font-medium mt-2">Reindex is already running</div>'

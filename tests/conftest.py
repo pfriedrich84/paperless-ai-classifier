@@ -182,3 +182,21 @@ def mock_ollama() -> AsyncMock:
     )
     client.embed = AsyncMock(return_value=[0.1] * 768)
     return client
+
+
+@pytest.fixture()
+def mock_meili() -> AsyncMock:
+    """A mocked MeiliClient."""
+
+    client = AsyncMock()
+    client.ping = AsyncMock(return_value=True)
+    client.ensure_index = AsyncMock()
+    client.upsert_document = AsyncMock()
+    client.upsert_documents_batch = AsyncMock()
+    client.delete_all_documents = AsyncMock()
+    client.hybrid_search = AsyncMock(return_value=[])
+    client.vector_search = AsyncMock(return_value=[])
+    client.get_document_vector = AsyncMock(return_value=None)
+    client.get_stats = AsyncMock(return_value={"number_of_documents": 0, "is_indexing": False})
+    client.aclose = AsyncMock()
+    return client

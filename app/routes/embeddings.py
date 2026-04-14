@@ -139,8 +139,9 @@ async def embeddings_search(request: Request, q: str = "", page: int = 1):
 
 @router.get("/similar/{document_id}")
 async def similar_documents(request: Request, document_id: int, limit: int = 10):
-    """HTMX partial — KNN results for a given document."""
-    results = find_similar_by_id(document_id, limit=limit)
+    """HTMX partial — vector search results for a given document."""
+    meili = request.app.state.meili
+    results = await find_similar_by_id(document_id, meili, limit=limit)
 
     if not results:
         return HTMLResponse(

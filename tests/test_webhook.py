@@ -82,6 +82,7 @@ def _setup_app(tmp_path, monkeypatch):
 
     app.state.paperless = mock_paperless
     app.state.ollama = mock_ollama
+    app.state.meili = AsyncMock()
     app.state.templates = templates
 
 
@@ -151,6 +152,7 @@ class TestWebhookEdit:
     @patch("app.routes.webhook.context_builder")
     def test_workflow_format(self, mock_cb, _mock_ocr, client):
         mock_cb.document_summary.return_value = "Test summary"
+        mock_cb.store_embedding = AsyncMock()
         payload = {"event": "document_updated", "object": {"id": 42}}
         r = client.post("/webhook/edit", json=payload)
         assert r.status_code == 200
@@ -163,6 +165,7 @@ class TestWebhookEdit:
     @patch("app.routes.webhook.context_builder")
     def test_legacy_format(self, mock_cb, _mock_ocr, client):
         mock_cb.document_summary.return_value = "Test summary"
+        mock_cb.store_embedding = AsyncMock()
         r = client.post("/webhook/edit", json={"document_id": 42})
         assert r.status_code == 200
         assert r.json()["action"] == "reembedded"
@@ -185,6 +188,7 @@ class TestWebhookEdit:
     def test_auth_success(self, mock_cb, _mock_ocr, client, monkeypatch):
         monkeypatch.setattr("app.config.settings.webhook_secret", "my-secret")
         mock_cb.document_summary.return_value = "Test summary"
+        mock_cb.store_embedding = AsyncMock()
         r = client.post(
             "/webhook/edit",
             json={"document_id": 42},

@@ -10,10 +10,11 @@ from contextlib import asynccontextmanager
 import structlog
 from mcp.server.fastmcp import FastMCP
 
+from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
-from app.db import init_db
+from app.db import EMBED_DIM, init_db
 from app.mcp_tools._auth import RateLimiter
 from app.mcp_tools._deps import Deps
 
@@ -52,16 +53,22 @@ async def lifespan(server: FastMCP) -> AsyncIterator[Deps]:
 
     paperless = PaperlessClient()
     ollama = OllamaClient()
+    meili = MeiliClient()
     rate_limiter = RateLimiter(max_per_hour=settings.mcp_classify_rate_limit)
 
     if not await paperless.ping():
         log.warning("paperless not reachable at startup")
     if not await ollama.ping():
         log.warning("ollama not reachable at startup")
+    if await meili.ping():
+        await meili.ensure_index(EMBED_DIM)
+    else:
+        log.warning("meilisearch not reachable at startup")
 
     try:
-        yield Deps(paperless=paperless, ollama=ollama, rate_limiter=rate_limiter)
+        yield Deps(paperless=paperless, ollama=ollama, meili=meili, rate_limiter=rate_limiter)
     finally:
+        await meili.aclose()
         await paperless.aclose()
         await ollama.aclose()
         log.info("MCP server shutdown complete")

@@ -56,6 +56,11 @@ services:
       MCP_API_KEY: ${MCP_API_KEY:-}
       MCP_CLASSIFY_RATE_LIMIT: ${MCP_CLASSIFY_RATE_LIMIT:-10}
 
+      # --- Meilisearch (runs as sidecar inside this container) ---
+      MEILISEARCH_URL: ${MEILISEARCH_URL:-http://localhost:7700}
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:-}
+      MEILISEARCH_HYBRID_RATIO: ${MEILISEARCH_HYBRID_RATIO:-0.5}
+
       # --- Storage / Logging ---
       DATA_DIR: ${DATA_DIR:-/data}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

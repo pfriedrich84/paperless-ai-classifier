@@ -297,20 +297,28 @@ async def complete_setup(request: Request):
     app = request.app
 
     # Close any existing clients
-    for attr in ("paperless", "ollama", "telegram"):
+    for attr in ("paperless", "ollama", "meili", "telegram"):
         old = getattr(app.state, attr, None)
         if old and hasattr(old, "aclose"):
             await old.aclose()
 
+    from app.clients.meilisearch import MeiliClient
+    from app.db import EMBED_DIM
+
     paperless = PaperlessClient()
     ollama = OllamaClient()
+    meili = MeiliClient()
     telegram = TelegramClient()
     app.state.paperless = paperless
     app.state.ollama = ollama
+    app.state.meili = meili
     app.state.telegram = telegram
 
+    if await meili.ping():
+        await meili.ensure_index(EMBED_DIM)
+
     start_scheduler(app)
-    start_telegram(telegram, paperless)
+    start_telegram(telegram, paperless, ollama, meili)
 
     return HTMLResponse(
         "",

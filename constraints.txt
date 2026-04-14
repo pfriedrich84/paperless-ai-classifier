@@ -14,3 +14,6 @@ requests<=2.33.0
 sse-starlette<=3.3.4
 pydantic-core<=2.41.5
 pygments<=2.20.0
+# meilisearch-python-sdk transitive deps
+camel-converter<=5.1.0
+aiofiles<=25.1.0

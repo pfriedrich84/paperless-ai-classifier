@@ -152,8 +152,9 @@ class TestAskPipeline:
 
             mock_find.return_value = [SimilarDocument(document=mock_doc, distance=0.15)]
 
+            mock_meili = AsyncMock()
             result = await ask(
-                "Wann war meine letzte Rechnung?", session, mock_paperless, mock_ollama
+                "Wann war meine letzte Rechnung?", session, mock_paperless, mock_ollama, mock_meili
             )
 
         assert "15.03.2024" in result.answer
@@ -168,8 +169,9 @@ class TestAskPipeline:
         mock_ollama = AsyncMock()
         mock_ollama.chat = AsyncMock(return_value="Antwort")
 
+        mock_meili = AsyncMock()
         with patch("app.chat.find_similar_by_query_text", return_value=[]):
-            await ask("Frage", session, mock_paperless, mock_ollama)
+            await ask("Frage", session, mock_paperless, mock_ollama, mock_meili)
 
         assert len(session.messages) == 2
         assert session.messages[0] == {"role": "user", "content": "Frage"}
@@ -186,8 +188,9 @@ class TestAskPipeline:
         mock_ollama = AsyncMock()
         mock_ollama.chat = AsyncMock(return_value="Antwort")
 
+        mock_meili = AsyncMock()
         with patch("app.chat.find_similar_by_query_text", return_value=[]):
-            await ask("Neue Frage", session, mock_paperless, mock_ollama)
+            await ask("Neue Frage", session, mock_paperless, mock_ollama, mock_meili)
 
         assert len(session.messages) <= MAX_HISTORY
 
@@ -198,8 +201,11 @@ class TestAskPipeline:
         mock_ollama = AsyncMock()
         mock_ollama.chat = AsyncMock(return_value="Keine Dokumente gefunden.")
 
+        mock_meili = AsyncMock()
         with patch("app.chat.find_similar_by_query_text", return_value=[]):
-            result = await ask("Gibt es Vertraege?", session, mock_paperless, mock_ollama)
+            result = await ask(
+                "Gibt es Vertraege?", session, mock_paperless, mock_ollama, mock_meili
+            )
 
         assert result.answer == "Keine Dokumente gefunden."
         assert result.sources == []
@@ -213,8 +219,9 @@ class TestAskPipeline:
         mock_ollama = AsyncMock()
         mock_ollama.chat = AsyncMock(side_effect=Exception("connection refused"))
 
+        mock_meili = AsyncMock()
         with patch("app.chat.find_similar_by_query_text", return_value=[]):
-            result = await ask("Frage", session, mock_paperless, mock_ollama)
+            result = await ask("Frage", session, mock_paperless, mock_ollama, mock_meili)
 
         assert "Fehler" in result.answer
 
@@ -249,10 +256,12 @@ class TestTelegramChatHandler:
         mock_paperless = AsyncMock()
         mock_ollama = AsyncMock()
 
-        old_tg, old_pl, old_ol = th._telegram, th._paperless, th._ollama
+        mock_meili = AsyncMock()
+        old_tg, old_pl, old_ol, old_ms = th._telegram, th._paperless, th._ollama, th._meili
         th._telegram = mock_telegram
         th._paperless = mock_paperless
         th._ollama = mock_ollama
+        th._meili = mock_meili
 
         try:
             with patch("app.chat.ask") as mock_ask:
@@ -279,6 +288,7 @@ class TestTelegramChatHandler:
             th._telegram = old_tg
             th._paperless = old_pl
             th._ollama = old_ol
+            th._meili = old_ms
 
     @pytest.mark.asyncio()
     async def test_handle_message_skips_commands(self):

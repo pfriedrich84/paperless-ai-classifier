@@ -7,6 +7,7 @@ import json
 
 import structlog
 
+from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.clients.telegram import TelegramClient
@@ -20,6 +21,7 @@ log = structlog.get_logger(__name__)
 _telegram: TelegramClient | None = None
 _paperless: PaperlessClient | None = None
 _ollama: OllamaClient | None = None
+_meili: MeiliClient | None = None
 _poll_task: asyncio.Task | None = None  # type: ignore[type-arg]
 
 
@@ -214,7 +216,7 @@ async def _handle_message(update: dict) -> None:
     if text.startswith("/"):
         return
 
-    if not _ollama or not _paperless or not _telegram:
+    if not _ollama or not _paperless or not _telegram or not _meili:
         return
 
     from app.chat import ask, get_or_create_session
@@ -223,7 +225,7 @@ async def _handle_message(update: dict) -> None:
     _, session = get_or_create_session(session_key)
 
     try:
-        result = await ask(text, session, _paperless, _ollama)
+        result = await ask(text, session, _paperless, _ollama, _meili)
     except Exception as exc:
         log.error("telegram chat failed", error=str(exc), chat_id=chat_id)
         await _telegram.send_message(f"Fehler bei der Verarbeitung: {exc}", parse_mode="HTML")
@@ -265,13 +267,15 @@ def start_telegram(
     telegram: TelegramClient,
     paperless: PaperlessClient,
     ollama: OllamaClient | None = None,
+    meili: MeiliClient | None = None,
 ) -> None:
     """Start the Telegram update-polling background task."""
-    global _telegram, _paperless, _ollama, _poll_task
+    global _telegram, _paperless, _ollama, _meili, _poll_task
 
     _telegram = telegram
     _paperless = paperless
     _ollama = ollama
+    _meili = meili
 
     if not telegram.enabled:
         log.info("telegram disabled — skipping")
