@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     telegram_poll_interval: int = 5  # seconds between getUpdates calls
 
     # --- Meilisearch ---
-    meilisearch_url: str = "http://meilisearch:7700"
+    meilisearch_url: str = "http://localhost:7700"
     meilisearch_api_key: str = ""
     meilisearch_hybrid_ratio: float = 0.5  # 0.0=keyword only, 1.0=semantic only
 

@@ -1,3 +1,7 @@
+# Stage 1: Grab the Meilisearch binary from the official image
+FROM getmeili/meilisearch:v1.13 AS meilisearch
+
+# Stage 2: Application
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,6 +18,9 @@ RUN apt-get update \
         tini \
         curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Meilisearch binary (hybrid search sidecar)
+COPY --from=meilisearch /bin/meilisearch /usr/local/bin/meilisearch
 
 # Dependencies (pinned with constraints for supply-chain protection)
 COPY pyproject.toml constraints.txt ./
