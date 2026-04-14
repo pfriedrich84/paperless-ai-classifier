@@ -13,7 +13,7 @@ from app.config import FIELD_META, needs_setup, settings
 from app.db import get_conn
 from app.indexer import cancel_reindex, get_reindex_progress, start_reindex_task
 from app.pipeline.classifier import _load_system_prompt, _prompt_override_path
-from app.worker import cancel_poll, get_poll_progress, start_poll_task
+from app.worker import _has_embedding_index, cancel_poll, get_poll_progress, start_poll_task
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/settings")
@@ -112,6 +112,12 @@ async def trigger_poll(request: Request):
         progress = get_poll_progress()
         if progress.running:
             return HTMLResponse(_render_poll_progress(progress))
+        if not _has_embedding_index():
+            return HTMLResponse(
+                '<div id="poll-result">'
+                '<div class="text-amber-600 text-sm font-medium mt-2">'
+                "Cannot start poll (no embedding index — run Reindex first)</div></div>"
+            )
         return HTMLResponse(
             '<div id="poll-result">'
             '<div class="text-amber-600 text-sm font-medium mt-2">'

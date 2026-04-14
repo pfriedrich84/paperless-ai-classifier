@@ -81,12 +81,20 @@ def cancel_poll() -> bool:
     return True
 
 
+def _has_embedding_index() -> bool:
+    """Return ``True`` if at least one document has been embedded."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT COUNT(*) AS c FROM doc_embedding_meta").fetchone()
+    return row["c"] > 0
+
+
 def start_poll_task() -> bool:
     """Launch ``poll_inbox`` as a background asyncio task.
 
-    Returns ``True`` if started, ``False`` if already running or reindexing.
+    Returns ``True`` if started, ``False`` if already running, reindexing,
+    or no embedding index exists yet.
     """
-    if _poll_progress.running or is_reindexing():
+    if _poll_progress.running or is_reindexing() or not _has_embedding_index():
         return False
 
     # Initialise progress BEFORE creating the task so the HTTP response
@@ -607,6 +615,10 @@ async def poll_inbox() -> None:
 
     if is_reindexing():
         log.info("reindex in progress — skipping poll")
+        return
+
+    if not _has_embedding_index():
+        log.info("no embedding index yet — skipping poll (run reindex first)")
         return
 
     log.info("polling inbox")

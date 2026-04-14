@@ -277,6 +277,7 @@ class TestPollCycleSummary:
         with (
             patch("app.worker._paperless", mock_paperless),
             patch("app.worker._ollama", AsyncMock()),
+            patch("app.worker._has_embedding_index", return_value=True),
             structlog.testing.capture_logs() as logs,
         ):
             await poll_inbox()
@@ -573,6 +574,7 @@ class TestPhasedPollInbox:
         with (
             patch("app.worker._paperless", mock_paperless),
             patch("app.worker._ollama", mock_ollama),
+            patch("app.worker._has_embedding_index", return_value=True),
             patch("app.pipeline.context_builder.get_conn") as mock_conn,
             patch("app.worker.notify_suggestion"),
             patch("app.worker.context_builder.store_embedding"),
