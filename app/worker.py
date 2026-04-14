@@ -82,10 +82,20 @@ def cancel_poll() -> bool:
 
 
 def _has_embedding_index() -> bool:
-    """Return ``True`` if at least one document has been embedded."""
+    """Return ``True`` if an index run completed successfully and embeddings exist.
+
+    Checks two conditions:
+    1. ``audit_log`` contains an ``index_complete`` entry (persistent marker)
+    2. ``doc_embedding_meta`` actually has entries (tables are populated)
+    """
     with get_conn() as conn:
-        row = conn.execute("SELECT COUNT(*) AS c FROM doc_embedding_meta").fetchone()
-    return row["c"] > 0
+        completed = conn.execute(
+            "SELECT 1 FROM audit_log WHERE action = 'index_complete' LIMIT 1"
+        ).fetchone()
+        if not completed:
+            return False
+        count = conn.execute("SELECT COUNT(*) AS c FROM doc_embedding_meta").fetchone()
+    return count["c"] > 0
 
 
 def start_poll_task() -> bool:

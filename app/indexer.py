@@ -126,6 +126,15 @@ async def initial_index(
             retries=ollama.embed_retry_count,
             current_embed_max_chars=settings.embed_max_chars,
         )
+
+    # Persist "index built successfully" marker so poll_inbox knows it can run
+    if count > 0:
+        with get_conn() as conn:
+            conn.execute(
+                "INSERT INTO audit_log (action, actor, details) VALUES (?, ?, ?)",
+                ("index_complete", "system", f"indexed={count}"),
+            )
+
     return count
 
 
