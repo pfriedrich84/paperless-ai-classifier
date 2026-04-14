@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # --- Worker ---
     poll_interval_seconds: int = 300
     context_max_docs: int = 5
-    max_doc_chars: int = 16000
+    max_doc_chars: int = 32000
     embed_max_chars: int = 16000
     auto_commit_confidence: int = 0  # 0 = immer manuell reviewen
     enable_ocr_correction: bool = False  # deprecated, use ocr_mode instead
