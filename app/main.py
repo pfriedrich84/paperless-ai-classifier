@@ -161,6 +161,10 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         if path.startswith("/webhook"):
             return await call_next(request)
 
+        # Embeddings webhook (POST) has its own auth via WEBHOOK_SECRET
+        if path.startswith("/embeddings") and request.method == "POST":
+            return await call_next(request)
+
         # Setup wizard is accessible without auth (guarded by its own flow)
         if path.startswith("/setup"):
             return await call_next(request)
