@@ -83,7 +83,12 @@ class Settings(BaseSettings):
 
     @property
     def prompts_dir(self) -> Path:
-        return Path(__file__).parent.parent / "prompts"
+        # Source-relative (works in development)
+        p = Path(__file__).parent.parent / "prompts"
+        if p.is_dir():
+            return p
+        # Installed package: fall back to working directory (Docker WORKDIR)
+        return Path.cwd() / "prompts"
 
 
 # Singleton
