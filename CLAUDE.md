@@ -204,7 +204,7 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 |--------|-------|---------------|----------------|
 | `nomic-embed-text-v2-moe` | Embedding-Similarity-Suche | `OLLAMA_EMBED_MODEL` | 8192 Tokens (`OLLAMA_EMBED_NUM_CTX`) |
 | `gemma4:e2b` | Klassifikation + Vision-OCR (Titel, Datum, etc.) | `OLLAMA_MODEL` | 8192 Tokens (`OLLAMA_NUM_CTX`) |
-| `gemma3:1b` | Text-Only OCR-Korrektur (optional, kleiner/schneller) | `OLLAMA_OCR_MODEL` | — |
+| `gemma4:e2b` | Text-Only OCR-Korrektur (optional) | `OLLAMA_OCR_MODEL` | — |
 
 **Text-Limits pro Phase:**
 
@@ -327,7 +327,7 @@ Nachher (phasenweise):     [alle embed] → [alle classify]
                            = 1-2 Switches unabhaengig von N
 
 Ohne OCR:        nomic ──────────────> gemma4:e2b                = 1 Switch
-Text-OCR:        gemma3:1b ──> nomic ──────────> gemma4:e2b      = 2 Switches
+Text-OCR:        gemma4:e2b ──> nomic ──────────> gemma4:e2b     = 1 Switch*
 Vision-OCR:      gemma4:e2b ──> nomic ──────────> gemma4:e2b     = 2 Switches*
 
 * Bei vision_light/vision_full ist das OCR-Modell = OLLAMA_MODEL (gemma4:e2b),
