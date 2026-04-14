@@ -35,13 +35,14 @@ def _serialize_embedding(vec: list[float]) -> bytes:
 def document_summary(doc: PaperlessDocument) -> str:
     """Short, embedding-friendly text representation of a document.
 
-    Limit content to ``settings.embed_max_chars`` chars to stay within the
-    embedding model's context window and avoid costly truncation retries.
+    Limit total output to ``settings.embed_max_chars`` chars to stay within
+    the embedding model's context window and avoid costly truncation retries.
     """
     parts = [doc.title or ""]
     if doc.content:
-        parts.append(doc.content[: settings.embed_max_chars])
-    return "\n".join(p for p in parts if p)
+        parts.append(doc.content)
+    text = "\n".join(p for p in parts if p)
+    return text[: settings.embed_max_chars]
 
 
 # ---------------------------------------------------------------------------

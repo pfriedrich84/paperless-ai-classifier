@@ -510,18 +510,25 @@ class TestDocumentSummary:
         assert "My Content" in result
 
     def test_content_truncated_at_default(self):
-        """Content should be limited to embed_max_chars (default 1000)."""
-        doc = _make_doc(1, content="x" * 2000)
+        """Total output should be limited to embed_max_chars (default 16000)."""
+        doc = _make_doc(1, content="x" * 20000)
         result = document_summary(doc)
-        # Title + newline + default embed_max_chars chars of content
-        assert len(result) <= len("Doc 1") + 1 + 1000
+        assert len(result) <= 16000
 
     def test_content_truncated_at_custom_limit(self, monkeypatch):
-        """Content truncation should respect a custom embed_max_chars value."""
+        """Total truncation should respect a custom embed_max_chars value."""
         monkeypatch.setattr("app.pipeline.context_builder.settings.embed_max_chars", 500)
         doc = _make_doc(1, content="x" * 2000)
         result = document_summary(doc)
-        assert len(result) <= len("Doc 1") + 1 + 500
+        assert len(result) <= 500
+
+    def test_long_title_still_truncated(self, monkeypatch):
+        """A long title + content combo must not exceed embed_max_chars."""
+        monkeypatch.setattr("app.pipeline.context_builder.settings.embed_max_chars", 500)
+        doc = PaperlessDocument(id=1, title="T" * 300, content="C" * 400, tags=[])
+        result = document_summary(doc)
+        assert len(result) <= 500
+        assert result.startswith("T")
 
     def test_empty_content(self):
         """A doc with only a title should still return the title."""
