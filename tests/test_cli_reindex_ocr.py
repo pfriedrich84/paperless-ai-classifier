@@ -10,8 +10,9 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _mock_init_db(monkeypatch: pytest.MonkeyPatch) -> None:
+def _mock_cli_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.cli.init_db", MagicMock())
+    monkeypatch.setattr("app.cli._configure_logging", MagicMock())
 
 
 def test_cmd_reindex_ocr_passes_force() -> None:

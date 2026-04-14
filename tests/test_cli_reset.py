@@ -85,6 +85,7 @@ def test_reset_idempotent(data_dir: Path) -> None:
 def test_reset_requires_yes_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     """main() exits with error when --yes is missing."""
     monkeypatch.setattr(sys, "argv", ["cli", "reset"])
+    monkeypatch.setattr("app.cli._configure_logging", MagicMock())
 
     from app.cli import main
 
