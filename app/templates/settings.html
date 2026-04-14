@@ -158,19 +158,7 @@
                     </button>
                     {% if reindex.running %}
                     <div id="reindex-result" hx-get="/settings/reindex-status"
-                         hx-trigger="every 2s" hx-swap="outerHTML">
-                        <div class="mt-2">
-                            <div class="flex justify-between text-sm text-gray-600 mb-1">
-                                <span>Reindexing…</span>
-                                <span>{{ reindex.done }} / {{ reindex.total }} documents</span>
-                            </div>
-                            <div class="w-full bg-gray-200 rounded-full h-2.5">
-                                {% set pct = (reindex.done / reindex.total * 100)|int if reindex.total > 0 else 0 %}
-                                <div class="bg-primary-600 h-2.5 rounded-full transition-all duration-500"
-                                     style="width: {{ pct }}%"></div>
-                            </div>
-                        </div>
-                    </div>
+                         hx-trigger="load, every 2s" hx-swap="outerHTML"></div>
                     {% else %}
                     <div id="reindex-result"></div>
                     {% endif %}

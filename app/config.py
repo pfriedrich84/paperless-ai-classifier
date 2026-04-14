@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     ollama_embed_retries: int = 3
     ollama_embed_retry_base_delay: float = 1.0
     ollama_num_ctx: int = 8192
-    ollama_embed_num_ctx: int = 512
+    ollama_embed_num_ctx: int = 8192
 
     # --- OCR ---
     ocr_mode: str = "off"  # off | text | vision_light | vision_full
@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     # --- Worker ---
     poll_interval_seconds: int = 300
     context_max_docs: int = 5
-    max_doc_chars: int = 8000
-    embed_max_chars: int = 1000
+    max_doc_chars: int = 32000
+    embed_max_chars: int = 16000
     auto_commit_confidence: int = 0  # 0 = immer manuell reviewen
     enable_ocr_correction: bool = False  # deprecated, use ocr_mode instead
 
@@ -209,44 +209,9 @@ FIELD_META: dict[str, dict[str, Any]] = {
     "keep_inbox_tag": _fm(
         "Paperless", "Keep Inbox Tag", "bool", help="Keep the inbox tag on documents after commit"
     ),
-    # --- Ollama ---
+    # --- Ollama (shared) ---
     "ollama_url": _fm(
         "Ollama", "Ollama URL", "url", restart="component", help="Base URL of the Ollama server"
-    ),
-    "ollama_model": _fm(
-        "Ollama", "Chat Model", restart="component", help="Ollama model for classification"
-    ),
-    "ollama_embed_model": _fm(
-        "Ollama", "Embedding Model", restart="component", help="Ollama model for embeddings"
-    ),
-    "ollama_ocr_model": _fm(
-        "Ollama",
-        "OCR Text Model",
-        restart="component",
-        help="Smaller model for text-only OCR correction (ocr_mode=text)",
-    ),
-    "ocr_mode": _fm(
-        "OCR",
-        "OCR Mode",
-        help="off | text | vision_light | vision_full",
-    ),
-    "ocr_vision_model": _fm(
-        "OCR",
-        "Vision Model",
-        restart="component",
-        help="Ollama model for vision OCR (empty = use Chat Model)",
-    ),
-    "ocr_vision_max_pages": _fm(
-        "OCR",
-        "Vision Max Pages",
-        "number",
-        help="Max document pages to process with vision model",
-    ),
-    "ocr_vision_dpi": _fm(
-        "OCR",
-        "Vision DPI",
-        "number",
-        help="Render resolution for PDF pages (pixels per inch)",
     ),
     "ollama_timeout_seconds": _fm(
         "Ollama",
@@ -255,20 +220,103 @@ FIELD_META: dict[str, dict[str, Any]] = {
         restart="component",
         help="HTTP timeout for Ollama requests",
     ),
-    "ollama_embed_retries": _fm(
-        "Ollama", "Embed Retries", "number", help="Max retries for embedding requests"
+    # --- Phase 1: OCR ---
+    "ocr_mode": _fm(
+        "Phase 1: OCR",
+        "OCR Mode",
+        help="off | text | vision_light | vision_full",
     ),
-    "ollama_embed_retry_base_delay": _fm(
-        "Ollama", "Embed Retry Delay", "number", help="Base delay (seconds) for embed retry backoff"
+    "ollama_ocr_model": _fm(
+        "Phase 1: OCR",
+        "OCR Text Model",
+        restart="component",
+        help="Smaller model for text-only OCR correction (ocr_mode=text)",
     ),
-    "ollama_num_ctx": _fm(
-        "Ollama", "Context Window (tokens)", "number", help="num_ctx for the chat model"
+    "ocr_vision_model": _fm(
+        "Phase 1: OCR",
+        "Vision Model",
+        restart="component",
+        help="Ollama model for vision OCR (empty = use Classification Model)",
+    ),
+    "ocr_vision_max_pages": _fm(
+        "Phase 1: OCR",
+        "Vision Max Pages",
+        "number",
+        help="Max document pages to process with vision model",
+    ),
+    "ocr_vision_dpi": _fm(
+        "Phase 1: OCR",
+        "Vision DPI",
+        "number",
+        help="Render resolution for PDF pages (pixels per inch)",
+    ),
+    "enable_ocr_correction": _fm(
+        "Phase 1: OCR",
+        "Enable OCR Correction (deprecated)",
+        "bool",
+        help="Deprecated: use OCR_MODE=text instead. Kept for backwards compatibility.",
+    ),
+    # --- Phase 2: Embedding ---
+    "ollama_embed_model": _fm(
+        "Phase 2: Embedding",
+        "Embedding Model",
+        restart="component",
+        help="Ollama model for embeddings (e.g. nomic-embed-text-v2-moe)",
     ),
     "ollama_embed_num_ctx": _fm(
-        "Ollama",
-        "Embed Context Window (tokens)",
+        "Phase 2: Embedding",
+        "Context Window (tokens)",
         "number",
-        help="num_ctx for the embedding model (match model's training context, e.g. 512 for nomic)",
+        help="num_ctx for the embedding model (nomic-embed-text-v2-moe supports up to 8192)",
+    ),
+    "embed_max_chars": _fm(
+        "Phase 2: Embedding",
+        "Max Document Chars",
+        "number",
+        help="Max characters of document text used for embedding (similarity search)",
+    ),
+    "ollama_embed_retries": _fm(
+        "Phase 2: Embedding",
+        "Retries",
+        "number",
+        help="Max retries for embedding requests (context-length + transient errors)",
+    ),
+    "ollama_embed_retry_base_delay": _fm(
+        "Phase 2: Embedding",
+        "Retry Base Delay (seconds)",
+        "number",
+        help="Base delay for exponential backoff on transient errors",
+    ),
+    # --- Phase 3: Klassifikation ---
+    "ollama_model": _fm(
+        "Phase 3: Klassifikation",
+        "Classification Model",
+        restart="component",
+        help="Ollama model for classification (e.g. gemma4:e2b)",
+    ),
+    "ollama_num_ctx": _fm(
+        "Phase 3: Klassifikation",
+        "Context Window (tokens)",
+        "number",
+        help="num_ctx for the classification model",
+    ),
+    "max_doc_chars": _fm(
+        "Phase 3: Klassifikation",
+        "Max Document Chars",
+        "number",
+        help="Max characters of document text sent to the classification LLM",
+    ),
+    "context_max_docs": _fm(
+        "Phase 3: Klassifikation",
+        "Context Max Docs",
+        "number",
+        help="Max similar documents used as few-shot context",
+    ),
+    "auto_commit_confidence": _fm(
+        "Phase 3: Klassifikation",
+        "Auto-Commit Confidence",
+        "number",
+        help="0 = always review. Set to e.g. 85 to auto-commit high-confidence results",
     ),
     # --- Worker ---
     "poll_interval_seconds": _fm(
@@ -277,33 +325,6 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "number",
         restart="component",
         help="Seconds between inbox polls",
-    ),
-    "context_max_docs": _fm(
-        "Worker", "Context Max Docs", "number", help="Max similar documents used as context"
-    ),
-    "max_doc_chars": _fm(
-        "Worker",
-        "Max Document Chars",
-        "number",
-        help="Max characters of document text sent to the LLM",
-    ),
-    "embed_max_chars": _fm(
-        "Worker",
-        "Embed Max Chars",
-        "number",
-        help="Max characters of document text used for embedding (similarity search)",
-    ),
-    "auto_commit_confidence": _fm(
-        "Worker",
-        "Auto-Commit Confidence",
-        "number",
-        help="0 = always review. Set to e.g. 85 to auto-commit high-confidence results",
-    ),
-    "enable_ocr_correction": _fm(
-        "Worker",
-        "Enable OCR Correction (deprecated)",
-        "bool",
-        help="Deprecated: use OCR_MODE=text instead. Kept for backwards compatibility.",
     ),
     # --- GUI ---
     "gui_port": _fm("GUI", "Port", "number", restart="app", help="Web UI port (requires restart)"),
