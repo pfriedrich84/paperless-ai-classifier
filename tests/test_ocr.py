@@ -8,6 +8,7 @@ from app.models import PaperlessDocument
 from app.pipeline.ocr_correction import (
     _split_text_by_pages,
     _text_looks_broken,
+    batch_correct_documents,
     cache_ocr_correction,
     effective_ocr_mode,
     get_cached_ocr,
@@ -371,3 +372,149 @@ class TestOcrCache:
                 assert get_cached_ocr(42) == "updated"
 
                 conn.close()
+
+
+# ---------------------------------------------------------------------------
+# batch_correct_documents (fetches from Paperless, not local DB)
+# ---------------------------------------------------------------------------
+class TestBatchCorrectDocuments:
+    @pytest.mark.asyncio
+    async def test_fetches_from_paperless(self, tmp_db):
+        """batch_correct_documents should fetch documents from Paperless API,
+        not from the local doc_embedding_meta table."""
+        from tests.conftest import _mock_get_conn
+
+        doc1 = PaperlessDocument(id=1, title="Doc 1", content="?" * 100, tags=[])
+        doc2 = PaperlessDocument(id=2, title="Doc 2", content="?" * 100, tags=[])
+
+        mock_paperless = AsyncMock()
+        mock_paperless.list_all_documents = AsyncMock(return_value=[doc1, doc2])
+
+        mock_ollama = AsyncMock()
+        mock_ollama.ocr_model = "gemma3:1b"
+        mock_ollama.chat_json = AsyncMock(
+            return_value={"corrected_text": "fixed", "num_corrections": 3}
+        )
+
+        with (
+            patch("app.pipeline.ocr_correction.effective_ocr_mode", return_value="text"),
+            patch(
+                "app.pipeline.ocr_correction.get_conn",
+                lambda: _mock_get_conn(tmp_db),
+            ),
+            patch("app.pipeline.ocr_correction.settings") as mock_settings,
+        ):
+            mock_settings.max_doc_chars = 8000
+            mock_settings.prompts_dir.__truediv__ = lambda self, x: type(
+                "P", (), {"read_text": lambda self, **kw: "system prompt"}
+            )()
+
+            corrected = await batch_correct_documents(mock_paperless, mock_ollama)
+
+        assert corrected == 2
+        mock_paperless.list_all_documents.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skips_cached_docs(self, tmp_db):
+        """Documents already in doc_ocr_cache should be skipped (force=False)."""
+        from tests.conftest import _mock_get_conn
+
+        doc1 = PaperlessDocument(id=1, title="Doc 1", content="?" * 100, tags=[])
+        doc2 = PaperlessDocument(id=2, title="Doc 2", content="?" * 100, tags=[])
+
+        # Pre-populate cache for doc 1
+        import sqlite3
+
+        conn = sqlite3.connect(str(tmp_db))
+        conn.execute(
+            "INSERT INTO doc_ocr_cache (document_id, corrected_content, ocr_mode, num_corrections)"
+            " VALUES (?, ?, ?, ?)",
+            (1, "already cached", "text", 1),
+        )
+        conn.commit()
+        conn.close()
+
+        mock_paperless = AsyncMock()
+        mock_paperless.list_all_documents = AsyncMock(return_value=[doc1, doc2])
+
+        mock_ollama = AsyncMock()
+        mock_ollama.ocr_model = "gemma3:1b"
+        mock_ollama.chat_json = AsyncMock(
+            return_value={"corrected_text": "fixed", "num_corrections": 3}
+        )
+
+        with (
+            patch("app.pipeline.ocr_correction.effective_ocr_mode", return_value="text"),
+            patch(
+                "app.pipeline.ocr_correction.get_conn",
+                lambda: _mock_get_conn(tmp_db),
+            ),
+            patch("app.pipeline.ocr_correction.settings") as mock_settings,
+        ):
+            mock_settings.max_doc_chars = 8000
+            mock_settings.prompts_dir.__truediv__ = lambda self, x: type(
+                "P", (), {"read_text": lambda self, **kw: "system prompt"}
+            )()
+
+            corrected = await batch_correct_documents(mock_paperless, mock_ollama, force=False)
+
+        # Only doc2 should be processed (doc1 was cached)
+        assert corrected == 1
+
+    @pytest.mark.asyncio
+    async def test_force_processes_cached(self, tmp_db):
+        """With force=True, even cached documents should be processed."""
+        from tests.conftest import _mock_get_conn
+
+        doc1 = PaperlessDocument(id=1, title="Doc 1", content="?" * 100, tags=[])
+
+        # Pre-populate cache for doc 1
+        import sqlite3
+
+        conn = sqlite3.connect(str(tmp_db))
+        conn.execute(
+            "INSERT INTO doc_ocr_cache (document_id, corrected_content, ocr_mode, num_corrections)"
+            " VALUES (?, ?, ?, ?)",
+            (1, "already cached", "text", 1),
+        )
+        conn.commit()
+        conn.close()
+
+        mock_paperless = AsyncMock()
+        mock_paperless.list_all_documents = AsyncMock(return_value=[doc1])
+
+        mock_ollama = AsyncMock()
+        mock_ollama.ocr_model = "gemma3:1b"
+        mock_ollama.chat_json = AsyncMock(
+            return_value={"corrected_text": "re-fixed", "num_corrections": 2}
+        )
+
+        with (
+            patch("app.pipeline.ocr_correction.effective_ocr_mode", return_value="text"),
+            patch(
+                "app.pipeline.ocr_correction.get_conn",
+                lambda: _mock_get_conn(tmp_db),
+            ),
+            patch("app.pipeline.ocr_correction.settings") as mock_settings,
+        ):
+            mock_settings.max_doc_chars = 8000
+            mock_settings.prompts_dir.__truediv__ = lambda self, x: type(
+                "P", (), {"read_text": lambda self, **kw: "system prompt"}
+            )()
+
+            corrected = await batch_correct_documents(mock_paperless, mock_ollama, force=True)
+
+        # doc1 should be processed despite being cached
+        assert corrected == 1
+
+    @pytest.mark.asyncio
+    async def test_ocr_off_returns_zero(self):
+        """When OCR mode is off, should return 0 without calling Paperless."""
+        mock_paperless = AsyncMock()
+        mock_ollama = AsyncMock()
+
+        with patch("app.pipeline.ocr_correction.effective_ocr_mode", return_value="off"):
+            corrected = await batch_correct_documents(mock_paperless, mock_ollama)
+
+        assert corrected == 0
+        mock_paperless.list_all_documents.assert_not_called()

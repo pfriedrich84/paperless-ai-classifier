@@ -97,7 +97,7 @@ async def batch_correct_documents(
     limit: int | None = None,
     force: bool = False,
 ) -> int:
-    """Run OCR correction over indexed documents.
+    """Run OCR correction over all Paperless documents.
 
     Skips documents already in ``doc_ocr_cache`` unless *force* is ``True``.
     Returns the number of documents corrected.
@@ -107,34 +107,32 @@ async def batch_correct_documents(
         log.info("batch OCR skipped — ocr_mode is off")
         return 0
 
-    # Get all indexed document IDs
-    with get_conn() as conn:
-        rows = conn.execute("SELECT document_id FROM doc_embedding_meta").fetchall()
-        indexed_ids = [row["document_id"] for row in rows]
+    # Fetch all documents from Paperless (not from local DB)
+    all_docs = await paperless.list_all_documents()
 
-        if not force:
+    if not force:
+        with get_conn() as conn:
             cached = conn.execute("SELECT document_id FROM doc_ocr_cache").fetchall()
             cached_ids = {row["document_id"] for row in cached}
-            indexed_ids = [did for did in indexed_ids if did not in cached_ids]
+        all_docs = [doc for doc in all_docs if doc.id not in cached_ids]
 
     if limit:
-        indexed_ids = indexed_ids[:limit]
+        all_docs = all_docs[:limit]
 
-    log.info("batch OCR starting", total=len(indexed_ids), mode=mode, force=force)
+    log.info("batch OCR starting", total=len(all_docs), mode=mode, force=force)
     corrected = 0
 
-    for doc_id in indexed_ids:
+    for doc in all_docs:
         try:
-            doc = await paperless.get_document(doc_id)
             text, num = await maybe_correct_ocr(doc, ollama, paperless)
             if num > 0 or mode.startswith("vision"):
-                cache_ocr_correction(doc_id, text, mode, num)
+                cache_ocr_correction(doc.id, text, mode, num)
                 corrected += 1
-                log.info("batch OCR corrected", doc_id=doc_id, num_corrections=num)
+                log.info("batch OCR corrected", doc_id=doc.id, num_corrections=num)
         except Exception as exc:
-            log.warning("batch OCR failed for document", doc_id=doc_id, error=str(exc))
+            log.warning("batch OCR failed for document", doc_id=doc.id, error=str(exc))
 
-    log.info("batch OCR complete", corrected=corrected, total=len(indexed_ids))
+    log.info("batch OCR complete", corrected=corrected, total=len(all_docs))
     return corrected
 
 
