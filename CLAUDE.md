@@ -147,7 +147,7 @@ app/
     errors.py          Fehlerliste + Retry
     stats.py           Counters, Graphen
     settings.py        Config-Editor, Prompt-Editor, Trigger fuer manuellen Run
-    webhook.py         Optional: Webhook-Endpoint fuer Paperless-Trigger
+    webhook.py         Webhook-Endpoints: /webhook/new (volle Pipeline) + /webhook/edit (Embedding-Update)
     inbox.py           Inbox-Ansicht: Dokumenten-Karten + Bulk-Aktionen
     embeddings.py      Vektor-DB Dashboard + Similarity-Search
     setup.py           Onboarding-Wizard mit Verbindungstests

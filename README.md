@@ -23,7 +23,7 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
 - 📊 Embeddings-Dashboard: Vektor-DB-Inspektion und Similarity-Search (`/embeddings`)
 - 📥 Inbox-View: Posteingang mit Dokumenten-Karten und Bulk-Aktionen (`/inbox`)
 - 🏷️ Tag-Blacklist: Unerwünschte Tags dauerhaft unterdrücken (`/tags`)
-- 🔔 Webhook-Support: Sofortige Verarbeitung als Alternative/Ergänzung zum Polling
+- 🔔 Webhook-Support: Sofortige Verarbeitung + Embedding-Update via Paperless-Workflow-Webhooks
 - ⚙️ Settings UI: Konfiguration im Browser ändern, ohne Container-Neustart (`/settings`)
 - 🐳 Single-Container, Dockhand-ready, fertiges Image via [GitHub Container Registry](https://ghcr.io/pfriedrich84/paperless-ai-classifier)
 
