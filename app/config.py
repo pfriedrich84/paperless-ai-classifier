@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     ollama_embed_retry_base_delay: float = 1.0
     ollama_num_ctx: int = 8192
     ollama_embed_num_ctx: int = 8192
+    ollama_ocr_num_ctx: int = 131072
 
     # --- OCR ---
     ocr_mode: str = "off"  # off | text | vision_light | vision_full
@@ -249,6 +250,12 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Vision DPI",
         "number",
         help="Render resolution for PDF pages (pixels per inch)",
+    ),
+    "ollama_ocr_num_ctx": _fm(
+        "Phase 1: OCR",
+        "OCR Context Window (tokens)",
+        "number",
+        help="num_ctx for OCR models. Vision OCR needs more context (~1536 tokens/page image). Default: 131072 (128K).",
     ),
     "enable_ocr_correction": _fm(
         "Phase 1: OCR",

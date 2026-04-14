@@ -27,6 +27,9 @@ dev = [
     "pytest-asyncio>=0.24.0",
 ]
 
+[project.scripts]
+paperless-classify = "app.cli:main"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

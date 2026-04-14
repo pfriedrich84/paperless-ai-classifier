@@ -186,7 +186,12 @@ async def _correct_text_only(
         prompt_path = settings.prompts_dir / "ocr_correction_system.txt"
         system = prompt_path.read_text(encoding="utf-8")
         user_text = text[: settings.max_doc_chars]
-        raw = await ollama.chat_json(system=system, user=user_text, model=ollama.ocr_model)
+        raw = await ollama.chat_json(
+            system=system,
+            user=user_text,
+            model=ollama.ocr_model,
+            num_ctx=settings.ollama_ocr_num_ctx,
+        )
 
         corrected = raw.get("corrected_text", text)
         num = int(raw.get("num_corrections", 0))
@@ -236,6 +241,7 @@ async def _correct_vision_light(
             user=user_text,
             images=images,
             model=vision_model,
+            num_ctx=settings.ollama_ocr_num_ctx,
         )
 
         corrected = raw.get("corrected_text", text)
@@ -292,6 +298,7 @@ async def _correct_vision_full(
                     user=page_text or "(Diese Seite hat keinen OCR-Text.)",
                     images=[page_image],
                     model=vision_model,
+                    num_ctx=settings.ollama_ocr_num_ctx,
                 )
                 corrected = raw.get("corrected_text", page_text)
                 num = int(raw.get("num_corrections", 0))

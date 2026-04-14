@@ -226,6 +226,66 @@ class TestMaybeCorrectOcr:
         assert num == 1
         mock_paperless.download_document.assert_called_once_with(doc.id)
 
+    @pytest.mark.asyncio
+    async def test_text_mode_passes_ocr_num_ctx(self):
+        """Text mode should pass ollama_ocr_num_ctx to chat_json."""
+        doc = PaperlessDocument(id=1, title="Test", content="?" * 100, tags=[99])
+        mock_ollama = AsyncMock()
+        mock_ollama.ocr_model = "gemma3:1b"
+        mock_ollama.chat_json = AsyncMock(
+            return_value={"corrected_text": "fixed", "num_corrections": 1}
+        )
+
+        with (
+            patch("app.pipeline.ocr_correction.effective_ocr_mode", return_value="text"),
+            patch("app.pipeline.ocr_correction.settings") as mock_settings,
+        ):
+            mock_settings.max_doc_chars = 8000
+            mock_settings.ollama_ocr_num_ctx = 131072
+            mock_settings.prompts_dir.__truediv__ = lambda self, x: type(
+                "P", (), {"read_text": lambda self, **kw: "system prompt"}
+            )()
+
+            await maybe_correct_ocr(doc, mock_ollama)
+
+        call_kwargs = mock_ollama.chat_json.call_args.kwargs
+        assert call_kwargs["num_ctx"] == 131072
+
+    @pytest.mark.asyncio
+    async def test_vision_full_passes_ocr_num_ctx(self):
+        """vision_full should pass ollama_ocr_num_ctx to chat_vision_json."""
+        clean = "Sehr geehrte Damen und Herren, wir bestaetigen den Eingang. " * 3
+        doc = PaperlessDocument(id=1, title="Test", content=clean, tags=[])
+        mock_ollama = AsyncMock()
+        mock_ollama.model = "gemma4:e2b"
+        mock_ollama.chat_vision_json = AsyncMock(
+            return_value={"corrected_text": "improved text", "num_corrections": 1}
+        )
+        mock_paperless = AsyncMock()
+        mock_paperless.download_document = AsyncMock(return_value=(b"%PDF-fake", "application/pdf"))
+
+        with (
+            patch("app.pipeline.ocr_correction.effective_ocr_mode", return_value="vision_full"),
+            patch("app.pipeline.ocr_correction.settings") as mock_settings,
+            patch(
+                "app.pipeline.ocr_correction._render_pages",
+                return_value=["base64image1"],
+            ),
+        ):
+            mock_settings.ocr_vision_model = ""
+            mock_settings.ocr_vision_max_pages = 1
+            mock_settings.ocr_vision_dpi = 150
+            mock_settings.max_doc_chars = 8000
+            mock_settings.ollama_ocr_num_ctx = 131072
+            mock_settings.prompts_dir.__truediv__ = lambda self, x: type(
+                "P", (), {"read_text": lambda self, **kw: "system prompt"}
+            )()
+
+            await maybe_correct_ocr(doc, mock_ollama, mock_paperless)
+
+        call_kwargs = mock_ollama.chat_vision_json.call_args.kwargs
+        assert call_kwargs["num_ctx"] == 131072
+
 
 # ---------------------------------------------------------------------------
 # Text splitting

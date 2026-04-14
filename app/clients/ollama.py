@@ -81,13 +81,17 @@ class OllamaClient:
         *,
         model: str | None = None,
         temperature: float = 0.1,
+        num_ctx: int | None = None,
     ) -> dict[str, Any]:
         """Call Ollama chat with format=json and parse the response."""
         payload = {
             "model": model or self.model,
             "format": "json",
             "stream": False,
-            "options": {"temperature": temperature, "num_ctx": settings.ollama_num_ctx},
+            "options": {
+                "temperature": temperature,
+                "num_ctx": num_ctx if num_ctx is not None else settings.ollama_num_ctx,
+            },
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -123,6 +127,7 @@ class OllamaClient:
         *,
         model: str | None = None,
         temperature: float = 0.1,
+        num_ctx: int | None = None,
     ) -> dict[str, Any]:
         """Call Ollama chat with images and format=json, then parse the response.
 
@@ -132,7 +137,10 @@ class OllamaClient:
             "model": model or self.model,
             "format": "json",
             "stream": False,
-            "options": {"temperature": temperature, "num_ctx": settings.ollama_num_ctx},
+            "options": {
+                "temperature": temperature,
+                "num_ctx": num_ctx if num_ctx is not None else settings.ollama_num_ctx,
+            },
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user, "images": images},

@@ -267,3 +267,42 @@ async def test_chat_json_passes_num_ctx(client: OllamaClient):
 
     sent_payload = client._client.post.call_args[1]["json"]
     assert sent_payload["options"]["num_ctx"] == 8192
+
+
+async def test_chat_json_passes_custom_num_ctx(client: OllamaClient):
+    """Explicit num_ctx override takes precedence over settings default."""
+    payload = {"ok": True}
+    client._client.post = AsyncMock(return_value=_make_chat_response(json.dumps(payload)))
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 8192
+        await client.chat_json(system="sys", user="usr", num_ctx=131072)
+
+    sent_payload = client._client.post.call_args[1]["json"]
+    assert sent_payload["options"]["num_ctx"] == 131072
+
+
+async def test_chat_vision_json_passes_default_num_ctx(client: OllamaClient):
+    """Vision chat uses settings.ollama_num_ctx when no override is given."""
+    payload = {"ok": True}
+    client._client.post = AsyncMock(return_value=_make_chat_response(json.dumps(payload)))
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 8192
+        await client.chat_vision_json(system="sys", user="usr", images=["abc123"])
+
+    sent_payload = client._client.post.call_args[1]["json"]
+    assert sent_payload["options"]["num_ctx"] == 8192
+
+
+async def test_chat_vision_json_passes_custom_num_ctx(client: OllamaClient):
+    """Explicit num_ctx override takes precedence for vision calls."""
+    payload = {"ok": True}
+    client._client.post = AsyncMock(return_value=_make_chat_response(json.dumps(payload)))
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 8192
+        await client.chat_vision_json(system="sys", user="usr", images=["abc123"], num_ctx=131072)
+
+    sent_payload = client._client.post.call_args[1]["json"]
+    assert sent_payload["options"]["num_ctx"] == 131072
