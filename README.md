@@ -134,6 +134,7 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 | `OLLAMA_EMBED_RETRY_BASE_DELAY` | `1.0` | Basis-Delay in Sekunden für exponentiellen Backoff |
 | `OLLAMA_NUM_CTX` | `8192` | Kontextfenster für das Chat-Modell (Tokens) |
 | `OLLAMA_EMBED_NUM_CTX` | `512` | Kontextfenster für das Embedding-Modell (Tokens) |
+| `OLLAMA_OCR_NUM_CTX` | `131072` | Kontextfenster für OCR-Modelle (Vision braucht ~1536 Tokens/Seite) |
 | `POLL_INTERVAL_SECONDS` | `300` | Wie oft die Inbox gepollt wird |
 | `CONTEXT_MAX_DOCS` | `5` | Wieviele ähnliche Dokumente in den Prompt |
 | `AUTO_COMMIT_CONFIDENCE` | `0` | Wenn > 0: ab diesem Score automatisch committen (0–100) |
@@ -151,6 +152,19 @@ Alle Einstellungen laufen über `.env`. Siehe `.env.example` für die vollständ
 | `OCR_VISION_MAX_PAGES` | `3` | Max. Seiten für Vision-OCR |
 | `OCR_VISION_DPI` | `150` | Render-Auflösung für PDF-Seiten |
 | `WEBHOOK_SECRET` | — | Shared Secret für `POST /webhook/paperless` |
+
+## CLI Commands
+
+Pipeline-Phasen können einzeln via CLI ausgelöst werden — nützlich zum Testen:
+
+```bash
+paperless-classify reindex        # Voller Reindex (OCR + Embedding)
+paperless-classify reindex-ocr    # Nur OCR-Korrektur
+paperless-classify reindex-embed  # Nur Embeddings neu berechnen
+paperless-classify poll           # Inbox verarbeiten (OCR + Embed + Klassifikation)
+```
+
+Alternativ: `python -m app.cli <command>`
 
 ## Review-Workflow
 

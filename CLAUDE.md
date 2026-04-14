@@ -126,6 +126,7 @@ app/
     classifier.py      Prompt bauen, Ollama aufrufen, JSON parsen
     committer.py       Angenommene Vorschlaege nach Paperless schreiben
   mcp_server.py        MCP Server Entrypoint (FastMCP, Lifespan)
+  cli.py               CLI Commands: reindex, reindex-ocr, reindex-embed, poll
   mcp_tools/
     _deps.py           Deps-Dataclass (PaperlessClient + OllamaClient)
     _auth.py           API-Key-Pruefung + Rate-Limiter
@@ -219,6 +220,7 @@ Konfigurierbar via `OCR_MODE` mit vier Stufen:
 - `OCR_VISION_MODEL` — Vision-Modell (leer = `OLLAMA_MODEL`). Muss vision-faehig sein.
 - `OCR_VISION_MAX_PAGES` — Max Seiten fuer Vision (Default: 3). Gilt fuer `vision_light` und `vision_full`.
 - `OCR_VISION_DPI` — Render-Aufloesung fuer PDF-Seiten (Default: 150).
+- `OLLAMA_OCR_NUM_CTX` — Kontextfenster fuer OCR-Modelle (Default: 131072 = 128K). Vision-OCR benoetigt ~1536 Tokens pro Seite fuer Bilder, daher deutlich hoeher als `OLLAMA_NUM_CTX`.
 
 **Wichtig:** Korrigierter Text wird **nie** zurueck nach Paperless geschrieben. Er wird nur lokal in `doc_ocr_cache` gespeichert und fuer Klassifikation + Embedding-Kontext genutzt. `batch_correct_documents()` erlaubt OCR-Korrektur ueber bereits indexierte Dokumente.
 
@@ -369,6 +371,27 @@ cp .env.example .env
 # Werte eintragen
 uvicorn app.main:app --reload --port 8088
 ```
+
+## CLI Commands (fuer manuelles Testen)
+
+Pipeline-Phasen koennen einzeln via CLI ausgeloest werden — als Alternative
+zu den GUI-Buttons in `/settings`.
+
+```bash
+# Voller Reindex: OCR-Korrektur (wenn aktiviert) + Embedding
+paperless-classify reindex
+
+# Nur OCR-Korrektur auf alle indexierten Dokumente (respektiert OCR_MODE)
+paperless-classify reindex-ocr
+
+# Nur Embeddings neu berechnen (nutzt gecachte OCR-Texte)
+paperless-classify reindex-embed
+
+# Inbox verarbeiten: OCR + Embedding + Klassifikation
+paperless-classify poll
+```
+
+Alternativ via `python -m app.cli <command>`.
 
 ## Pre-Commit Checks (WICHTIG)
 
