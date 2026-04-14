@@ -82,8 +82,9 @@ Der Kontext allein genuegt nicht — zusaetzlich greifen mehrere Sicherheitsnetz
 - **Inbox-Exclusion:** Noch nicht reviewte Dokumente werden nie als Kontext genutzt,
   um fehlerhafte Klassifikationen nicht zu propagieren.
 - **Token-Budget-Management:** Der Prompt verteilt 60% des Kontextfensters auf das
-  Zieldokument und 40% auf Kontext-Dokumente, mit dynamischem Fallback wenn der
-  Platz knapp wird.
+  Zieldokument (max `MAX_DOC_CHARS`, Default 32000) und 40% auf Kontext-Dokumente,
+  mit dynamischem Fallback wenn der Platz knapp wird. `EMBED_MAX_CHARS` (Default
+  16000) begrenzt den Text fuer Embeddings (Titel + Content gesamt).
 
 ## Nicht-Ziele
 
@@ -198,11 +199,18 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 
 **Drei Modelle im Einsatz:**
 
-| Modell | Zweck | Konfiguration |
-|--------|-------|---------------|
-| `nomic-embed-text-v2-moe` | Embedding-Similarity-Suche | `OLLAMA_EMBED_MODEL` |
-| `gemma4:e2b` | Klassifikation + Vision-OCR (Titel, Datum, etc.) | `OLLAMA_MODEL` |
-| `gemma3:1b` | Text-Only OCR-Korrektur (optional, kleiner/schneller) | `OLLAMA_OCR_MODEL` |
+| Modell | Zweck | Konfiguration | Context Window |
+|--------|-------|---------------|----------------|
+| `nomic-embed-text-v2-moe` | Embedding-Similarity-Suche | `OLLAMA_EMBED_MODEL` | 8192 Tokens (`OLLAMA_EMBED_NUM_CTX`) |
+| `gemma4:e2b` | Klassifikation + Vision-OCR (Titel, Datum, etc.) | `OLLAMA_MODEL` | 8192 Tokens (`OLLAMA_NUM_CTX`) |
+| `gemma3:1b` | Text-Only OCR-Korrektur (optional, kleiner/schneller) | `OLLAMA_OCR_MODEL` | — |
+
+**Text-Limits pro Phase:**
+
+| Phase | Setting | Default | Beschreibung |
+|-------|---------|---------|-------------|
+| Embedding | `EMBED_MAX_CHARS` | 16000 | Max Zeichen fuer Embedding (Titel + Content, gesamt) |
+| Klassifikation | `MAX_DOC_CHARS` | 32000 | Max Zeichen fuer Zieldokument im LLM-Prompt |
 
 ## OCR-Korrektur (Vision-LLM)
 
@@ -282,7 +290,8 @@ jeder Modellwechsel kostet mehrere Sekunden (entladen + laden).
                +--+---------+----------------+
                | Phase 2: Embedding          |  OLLAMA_EMBED_MODEL
                | Fuer alle Docs:             |  (nomic-embed-text-v2-moe)
-               |   1x embed() pro Doc        |
+               |   Text: max EMBED_MAX_CHARS |  num_ctx: OLLAMA_EMBED_NUM_CTX
+               |   1x embed() pro Doc        |  (Default: 8192 Tokens)
                |   KNN-Suche → Kontext       |
                |   Embedding merken          |
                +--+---------+----------------+
@@ -292,7 +301,8 @@ jeder Modellwechsel kostet mehrere Sekunden (entladen + laden).
                +--+---------+----------------+
                | Phase 3: Klassifikation     |  OLLAMA_MODEL
                | Fuer alle Docs:             |  (gemma4:e2b)
-               |   classify() mit Kontext    |
+               |   Text: max MAX_DOC_CHARS   |  num_ctx: OLLAMA_NUM_CTX
+               |   classify() mit Kontext    |  (Default: 8192 Tokens)
                |   Suggestion speichern      |
                |   Telegram / Auto-Commit    |
                |   Embedding in DB schreiben |  (kein Ollama-Call!)
@@ -344,6 +354,8 @@ Embedding trotzdem indexiert (falls vorhanden).
 8. **Phasen-Pipeline:** `poll_inbox()` verarbeitet alle Dokumente phasenweise (OCR → Embedding → Klassifikation) statt einzeln. Jede Phase nutzt genau ein Ollama-Modell und entlaedt es danach via `keep_alive=0`. Das minimiert VRAM-Verbrauch und Modell-Swaps.
 9. **Embedding-Deduplizierung:** Pro Dokument wird `ollama.embed()` genau einmal aufgerufen. Das Ergebnis wird sowohl fuer die KNN-Kontext-Suche als auch fuer die Indexierung wiederverwendet (`_EmbeddingResult`-Dataclass traegt den Vektor zwischen den Phasen).
 10. **OCR-Cache:** Korrigierter Text landet in `doc_ocr_cache`, nie in Paperless. Sowohl `poll_inbox()` als auch `reindex_all()` nutzen gecachte Korrekturen. Beim Reindex wird OCR vor dem Embedding als Phase 0 ausgefuehrt — gecachte Eintraege werden uebersprungen.
+11. **Embedding-Text-Limit:** `document_summary()` begrenzt den **Gesamttext** (Titel + Content) auf `EMBED_MAX_CHARS` (Default 16000). Die Truncation greift auf die kombinierte Laenge, nicht nur auf den Content-Teil — damit kann ein langer Titel das Limit nicht sprengen.
+12. **Settings-Gruppierung:** Die Settings-Seite gruppiert Ollama-Settings nach Pipeline-Phase: "Ollama" (shared: URL, Timeout), "Phase 1: OCR", "Phase 2: Embedding", "Phase 3: Klassifikation". Jede Phase zeigt Modell, Context Window und Text-Limits.
 
 ## Deployment (Dockhand)
 
