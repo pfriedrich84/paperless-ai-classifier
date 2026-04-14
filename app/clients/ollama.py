@@ -239,8 +239,8 @@ class OllamaClient:
             except httpx.HTTPStatusError as exc:
                 last_exc = exc
                 if attempt < max_retries and self._is_context_length_error(exc.response):
-                    # Input too long — truncate by 25% and retry immediately
-                    prompt = prompt[: int(len(prompt) * 0.75)]
+                    # Input too long — truncate by 50% and retry immediately
+                    prompt = prompt[: int(len(prompt) * 0.50)]
                     self.embed_retry_count += 1
                     log.warning(
                         "embedding input exceeds context length, truncating"

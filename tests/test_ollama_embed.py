@@ -150,9 +150,9 @@ async def test_embed_context_length_error_truncates_and_retries(client: OllamaCl
 
     assert result == embedding
     assert client.embed_retry_count == 1
-    # Second call should have truncated prompt (75% of original)
+    # Second call should have truncated prompt (50% of original)
     second_call_payload = client._client.post.call_args_list[1][1]["json"]
-    assert len(second_call_payload["prompt"]) == int(len(long_text) * 0.75)
+    assert len(second_call_payload["prompt"]) == int(len(long_text) * 0.50)
 
 
 async def test_embed_context_length_progressive_truncation(client: OllamaClient):
@@ -172,9 +172,9 @@ async def test_embed_context_length_progressive_truncation(client: OllamaClient)
 
     assert result == embedding
     assert client.embed_retry_count == 2
-    # Third call: 2000 * 0.75 * 0.75 = 1125
+    # Third call: 2000 * 0.50 * 0.50 = 500
     third_call_payload = client._client.post.call_args_list[2][1]["json"]
-    assert len(third_call_payload["prompt"]) == int(int(2000 * 0.75) * 0.75)
+    assert len(third_call_payload["prompt"]) == int(int(2000 * 0.50) * 0.50)
 
 
 async def test_embed_retry_disabled_when_zero(client: OllamaClient):

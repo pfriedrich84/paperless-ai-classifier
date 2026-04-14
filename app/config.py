@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     ollama_embed_retries: int = 3
     ollama_embed_retry_base_delay: float = 1.0
     ollama_num_ctx: int = 8192
-    ollama_embed_num_ctx: int = 8192
+    ollama_embed_num_ctx: int = 512
     ollama_ocr_num_ctx: int = 131072
 
     # --- OCR ---
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     poll_interval_seconds: int = 300
     context_max_docs: int = 5
     max_doc_chars: int = 32000
-    embed_max_chars: int = 16000
+    embed_max_chars: int = 1000
     auto_commit_confidence: int = 0  # 0 = immer manuell reviewen
     enable_ocr_correction: bool = False  # deprecated, use ocr_mode instead
 
