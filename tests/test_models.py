@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models import ClassificationResult, PaperlessDocument, ReviewDecision
+from app.models import ClassificationResult, PaperlessDocument, ReviewDecision, SuggestionRow
 
 
 class TestClassificationResult:
@@ -128,3 +128,56 @@ class TestReviewDecision:
                 title="Test",
                 action="invalid",
             )
+
+
+class TestSuggestionRowEffective:
+    """Tests for effective_* fallback properties on SuggestionRow."""
+
+    def _make_row(self, **overrides) -> SuggestionRow:
+        defaults = {
+            "id": 1,
+            "document_id": 42,
+            "created_at": "2024-01-01T00:00:00",
+            "status": "pending",
+        }
+        defaults.update(overrides)
+        return SuggestionRow(**defaults)
+
+    def test_effective_uses_proposed_when_set(self):
+        s = self._make_row(
+            original_date="2024-01-01",
+            proposed_date="2024-06-15",
+            original_correspondent=1,
+            proposed_correspondent_id=2,
+            original_doctype=10,
+            proposed_doctype_id=20,
+            original_storage_path=30,
+            proposed_storage_path_id=40,
+        )
+        assert s.effective_date == "2024-06-15"
+        assert s.effective_correspondent_id == 2
+        assert s.effective_doctype_id == 20
+        assert s.effective_storage_path_id == 40
+
+    def test_effective_falls_back_to_original(self):
+        s = self._make_row(
+            original_date="2024-01-01",
+            proposed_date=None,
+            original_correspondent=1,
+            proposed_correspondent_id=None,
+            original_doctype=10,
+            proposed_doctype_id=None,
+            original_storage_path=30,
+            proposed_storage_path_id=None,
+        )
+        assert s.effective_date == "2024-01-01"
+        assert s.effective_correspondent_id == 1
+        assert s.effective_doctype_id == 10
+        assert s.effective_storage_path_id == 30
+
+    def test_effective_returns_none_when_both_null(self):
+        s = self._make_row()
+        assert s.effective_date is None
+        assert s.effective_correspondent_id is None
+        assert s.effective_doctype_id is None
+        assert s.effective_storage_path_id is None

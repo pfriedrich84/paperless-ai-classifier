@@ -96,6 +96,34 @@ class SuggestionRow(BaseModel):
     raw_response: str | None = None
     context_docs_json: str | None = None
 
+    @property
+    def effective_date(self) -> str | None:
+        return self.proposed_date if self.proposed_date is not None else self.original_date
+
+    @property
+    def effective_correspondent_id(self) -> int | None:
+        return (
+            self.proposed_correspondent_id
+            if self.proposed_correspondent_id is not None
+            else self.original_correspondent
+        )
+
+    @property
+    def effective_doctype_id(self) -> int | None:
+        return (
+            self.proposed_doctype_id
+            if self.proposed_doctype_id is not None
+            else self.original_doctype
+        )
+
+    @property
+    def effective_storage_path_id(self) -> int | None:
+        return (
+            self.proposed_storage_path_id
+            if self.proposed_storage_path_id is not None
+            else self.original_storage_path
+        )
+
 
 # =============================================================================
 # Tag whitelist

@@ -33,10 +33,10 @@ def _decision_from_proposed(suggestion: SuggestionRow) -> ReviewDecision:
     return ReviewDecision(
         suggestion_id=suggestion.id,
         title=suggestion.proposed_title or "",
-        date=suggestion.proposed_date,
-        correspondent_id=suggestion.proposed_correspondent_id,
-        doctype_id=suggestion.proposed_doctype_id,
-        storage_path_id=suggestion.proposed_storage_path_id,
+        date=suggestion.effective_date,
+        correspondent_id=suggestion.effective_correspondent_id,
+        doctype_id=suggestion.effective_doctype_id,
+        storage_path_id=suggestion.effective_storage_path_id,
         tag_ids=tag_ids,
         action="accept",
     )

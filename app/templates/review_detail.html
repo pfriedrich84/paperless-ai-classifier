@@ -85,7 +85,7 @@
                 <div>
                     <label for="date" class="block text-xs font-medium text-gray-500 uppercase">Date</label>
                     <input type="date" name="date" id="date"
-                           value="{{ s.proposed_date or '' }}"
+                           value="{{ s.effective_date or '' }}"
                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm
                                   focus:border-primary-500 focus:ring-primary-500 text-sm
                                   px-3 py-2 border">
@@ -100,7 +100,7 @@
                                    px-3 py-2 border">
                         <option value="">— None —</option>
                         {% for c in correspondents %}
-                        <option value="{{ c.id }}" {{ 'selected' if c.id == s.proposed_correspondent_id }}>{{ c.name }}</option>
+                        <option value="{{ c.id }}" {{ 'selected' if c.id == s.effective_correspondent_id }}>{{ c.name }}</option>
                         {% endfor %}
                     </select>
                     {% if s.proposed_correspondent_name and not s.proposed_correspondent_id %}
@@ -117,7 +117,7 @@
                                    px-3 py-2 border">
                         <option value="">— None —</option>
                         {% for d in doctypes %}
-                        <option value="{{ d.id }}" {{ 'selected' if d.id == s.proposed_doctype_id }}>{{ d.name }}</option>
+                        <option value="{{ d.id }}" {{ 'selected' if d.id == s.effective_doctype_id }}>{{ d.name }}</option>
                         {% endfor %}
                     </select>
                     {% if s.proposed_doctype_name and not s.proposed_doctype_id %}
@@ -134,7 +134,7 @@
                                    px-3 py-2 border">
                         <option value="">— None —</option>
                         {% for sp in storage_paths %}
-                        <option value="{{ sp.id }}" {{ 'selected' if sp.id == s.proposed_storage_path_id }}>{{ sp.name }}</option>
+                        <option value="{{ sp.id }}" {{ 'selected' if sp.id == s.effective_storage_path_id }}>{{ sp.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
