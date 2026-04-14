@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     ollama_embed_retries: int = 3
     ollama_embed_retry_base_delay: float = 1.0
     ollama_num_ctx: int = 8192
-    ollama_embed_num_ctx: int = 512
+    ollama_embed_num_ctx: int = 8192
     ollama_ocr_num_ctx: int = 131072
 
     # --- OCR ---
