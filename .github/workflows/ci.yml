@@ -64,6 +64,9 @@ jobs:
           print(f'All {len(templates)} templates OK')
           "
 
+      - name: Console script check
+        run: paperless-classify --help
+
       - name: Import check
         run: python -c "import app.main"
 
@@ -81,3 +84,6 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t test .
+
+      - name: Verify CLI in Docker image
+        run: docker run --rm test paperless-classify --help

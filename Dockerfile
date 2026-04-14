@@ -27,12 +27,16 @@ RUN pip install --upgrade pip \
         "apscheduler>=3.10.4" \
         "structlog>=24.4.0" \
         "sqlite-vec>=0.1.3,<=0.1.7" \
-        "mcp[cli]>=1.20.0,<=1.26.0"
+        "mcp[cli]>=1.20.0,<=1.26.0" \
+        "pymupdf>=1.24.0,<=1.27.2.2"
 
 # App
 COPY app ./app
 COPY prompts ./prompts
 COPY entrypoint.sh ./
+
+# Register console script entry point (deps already installed above)
+RUN pip install --no-deps .
 
 # Persistent state
 RUN mkdir -p /data
