@@ -1,0 +1,9 @@
+# Hadolint configuration
+# See https://github.com/hadolint/hadolint#configure
+ignored:
+  # We intentionally don't pin apt versions — apt-get upgrade handles security patches
+  - DL3008
+  # pip/setuptools/wheel are intentionally unpinned to get the latest (CVE fixes)
+  - DL3013
+  # Separate RUN for mkdir is intentional for layer clarity
+  - DL3059
