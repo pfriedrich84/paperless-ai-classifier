@@ -172,6 +172,41 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(sql)
             log.info("migration applied", table=table, column=column)
 
+    _migrate_embed_dim(conn)
+
+
+def _migrate_embed_dim(conn: sqlite3.Connection) -> None:
+    """Recreate doc_embeddings if EMBED_DIM changed (e.g. 768 → 1024).
+
+    vec0 virtual tables have a fixed dimension at creation; CREATE IF NOT
+    EXISTS silently keeps the old schema.  We detect the mismatch by
+    inspecting sqlite_master and rebuild if needed.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='doc_embeddings'"
+    ).fetchone()
+    if row is None:
+        return  # table doesn't exist yet — schema creation will handle it
+
+    create_sql = row[0] if isinstance(row, (tuple, list)) else row["sql"]
+    expected = f"FLOAT[{EMBED_DIM}]"
+    if expected.lower() in create_sql.lower():
+        return  # dimension already matches
+
+    log.warning(
+        "embedding dimension mismatch — recreating doc_embeddings",
+        expected_dim=EMBED_DIM,
+        old_sql=create_sql,
+    )
+    conn.execute("DROP TABLE IF EXISTS doc_embeddings")
+    conn.execute("DELETE FROM doc_embedding_meta")
+    conn.execute(
+        f"""CREATE VIRTUAL TABLE doc_embeddings USING vec0(
+            document_id INTEGER PRIMARY KEY,
+            embedding   FLOAT[{EMBED_DIM}]
+        )"""
+    )
+
 
 def init_db() -> None:
     """Create the database file, apply the schema, and run migrations."""

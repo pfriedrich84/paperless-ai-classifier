@@ -21,7 +21,7 @@ Dieser Klassifikator geht einen fundamentalen Schritt weiter:
 ```
                   Neues Dokument
                        |
-                  [Embedding]          ← nomic-embed-text-v2-moe
+                  [Embedding]          ← qwen3-embedding:0.6b
                        |
               KNN-Suche in sqlite-vec
                        |
@@ -84,7 +84,7 @@ Der Kontext allein genuegt nicht — zusaetzlich greifen mehrere Sicherheitsnetz
 - **Token-Budget-Management:** Der Prompt verteilt 60% des Kontextfensters auf das
   Zieldokument (max `MAX_DOC_CHARS`, Default 32000) und 40% auf Kontext-Dokumente,
   mit dynamischem Fallback wenn der Platz knapp wird. `EMBED_MAX_CHARS` (Default
-  16000) begrenzt den Text fuer Embeddings (Titel + Content gesamt).
+  6000) begrenzt den Text fuer Embeddings (Titel + Content gesamt).
 
 ## Nicht-Ziele
 
@@ -200,7 +200,7 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 ## Ollama-Reference
 
 - `POST /api/chat` mit `format: "json"` → strukturierte JSON-Antwort. Unterstuetzt auch `images`-Feld fuer Vision-Modelle (base64-encoded, kein Data-URI-Prefix).
-- `POST /api/embeddings` → Vektor fuer Similarity-Suche (Default: `nomic-embed-text-v2-moe`, multilingual DE/EN). Bei Context-Length-Fehlern (500) wird der Text progressiv um 25% gekuerzt und erneut gesendet. Transiente 5xx/429-Fehler werden mit exponentiellem Backoff wiederholt. Konfigurierbar via `OLLAMA_EMBED_RETRIES` (Default: 3) und `OLLAMA_EMBED_RETRY_BASE_DELAY` (Default: 1.0s).
+- `POST /api/embeddings` → Vektor fuer Similarity-Suche (Default: `qwen3-embedding:0.6b`, 1024-dim, 32K context, multilingual DE/EN). Bei Context-Length-Fehlern (500) wird der Text progressiv um 50% gekuerzt und erneut gesendet. Transiente 5xx/429-Fehler werden mit exponentiellem Backoff wiederholt. Konfigurierbar via `OLLAMA_EMBED_RETRIES` (Default: 3) und `OLLAMA_EMBED_RETRY_BASE_DELAY` (Default: 1.0s).
 - `POST /api/generate` mit `keep_alive: 0` → Modell aus VRAM entladen (genutzt zwischen Pipeline-Phasen)
 - `GET /api/tags` → Healthcheck + Modell-Liste
 
@@ -208,7 +208,7 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 
 | Modell | Zweck | Konfiguration | Context Window |
 |--------|-------|---------------|----------------|
-| `nomic-embed-text-v2-moe` | Embedding-Similarity-Suche | `OLLAMA_EMBED_MODEL` | 8192 Tokens (`OLLAMA_EMBED_NUM_CTX`) |
+| `qwen3-embedding:0.6b` | Embedding-Similarity-Suche (1024-dim) | `OLLAMA_EMBED_MODEL` | 8192 Tokens (`OLLAMA_EMBED_NUM_CTX`, model supports 32K) |
 | `gemma4:e2b` | Klassifikation + Vision-OCR (Titel, Datum, etc.) | `OLLAMA_MODEL` | 8192 Tokens (`OLLAMA_NUM_CTX`) |
 | `gemma4:e2b` | Text-Only OCR-Korrektur (optional) | `OLLAMA_OCR_MODEL` | — |
 
@@ -216,7 +216,7 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 
 | Phase | Setting | Default | Beschreibung |
 |-------|---------|---------|-------------|
-| Embedding | `EMBED_MAX_CHARS` | 16000 | Max Zeichen fuer Embedding (Titel + Content, gesamt) |
+| Embedding | `EMBED_MAX_CHARS` | 6000 | Max Zeichen fuer Embedding (Titel + Content, gesamt) |
 | Klassifikation | `MAX_DOC_CHARS` | 32000 | Max Zeichen fuer Zieldokument im LLM-Prompt |
 
 ## OCR-Korrektur (Vision-LLM)
@@ -297,7 +297,7 @@ jeder Modellwechsel kostet mehrere Sekunden (entladen + laden).
                   |         |
                +--+---------+----------------+
                | Phase 2: Embedding          |  OLLAMA_EMBED_MODEL
-               | Fuer alle Docs:             |  (nomic-embed-text-v2-moe)
+               | Fuer alle Docs:             |  (qwen3-embedding:0.6b)
                |   Text: max EMBED_MAX_CHARS |  num_ctx: OLLAMA_EMBED_NUM_CTX
                |   1x embed() pro Doc        |  (Default: 8192 Tokens)
                |   KNN-Suche → Kontext       |
@@ -332,9 +332,9 @@ Vorher (pro Dokument):     Doc1: embed → classify → embed → Doc2: embed �
 Nachher (phasenweise):     [alle embed] → [alle classify]
                            = 1-2 Switches unabhaengig von N
 
-Ohne OCR:        nomic ──────────────> gemma4:e2b                = 1 Switch
-Text-OCR:        gemma4:e2b ──> nomic ──────────> gemma4:e2b     = 1 Switch*
-Vision-OCR:      gemma4:e2b ──> nomic ──────────> gemma4:e2b     = 2 Switches*
+Ohne OCR:        qwen3-embed ─────────> gemma4:e2b                = 1 Switch
+Text-OCR:        gemma4:e2b ──> qwen3-embed ────> gemma4:e2b     = 1 Switch*
+Vision-OCR:      gemma4:e2b ──> qwen3-embed ────> gemma4:e2b     = 2 Switches*
 
 * Bei vision_light/vision_full ist das OCR-Modell = OLLAMA_MODEL (gemma4:e2b),
   daher wird es nach Phase 1 entladen und fuer Phase 3 wieder geladen.
@@ -362,7 +362,7 @@ Embedding trotzdem indexiert (falls vorhanden).
 8. **Phasen-Pipeline:** `poll_inbox()` verarbeitet alle Dokumente phasenweise (OCR → Embedding → Klassifikation) statt einzeln. Jede Phase nutzt genau ein Ollama-Modell und entlaedt es danach via `keep_alive=0`. Das minimiert VRAM-Verbrauch und Modell-Swaps.
 9. **Embedding-Deduplizierung:** Pro Dokument wird `ollama.embed()` genau einmal aufgerufen. Das Ergebnis wird sowohl fuer die KNN-Kontext-Suche als auch fuer die Indexierung wiederverwendet (`_EmbeddingResult`-Dataclass traegt den Vektor zwischen den Phasen).
 10. **OCR-Cache:** Korrigierter Text landet in `doc_ocr_cache`, nie in Paperless. Sowohl `poll_inbox()` als auch `reindex_all()` nutzen gecachte Korrekturen. Beim Reindex wird OCR vor dem Embedding als Phase 0 ausgefuehrt — gecachte Eintraege werden uebersprungen.
-11. **Embedding-Text-Limit:** `document_summary()` begrenzt den **Gesamttext** (Titel + Content) auf `EMBED_MAX_CHARS` (Default 16000). Die Truncation greift auf die kombinierte Laenge, nicht nur auf den Content-Teil — damit kann ein langer Titel das Limit nicht sprengen.
+11. **Embedding-Text-Limit:** `document_summary()` begrenzt den **Gesamttext** (Titel + Content) auf `EMBED_MAX_CHARS` (Default 6000). Die Truncation greift auf die kombinierte Laenge, nicht nur auf den Content-Teil — damit kann ein langer Titel das Limit nicht sprengen.
 12. **Settings-Gruppierung:** Die Settings-Seite gruppiert Ollama-Settings nach Pipeline-Phase: "Ollama" (shared: URL, Timeout), "Phase 1: OCR", "Phase 2: Embedding", "Phase 3: Klassifikation". Jede Phase zeigt Modell, Context Window und Text-Limits.
 
 ## Deployment (Dockhand)
@@ -639,7 +639,7 @@ Install (mit constraints.txt)
 
 ## Bekannte TODOs / Ausbau
 
-- [ ] sqlite-vec HNSW-Index beobachten; vec0 Flat-Scan genuegt bis ~10k Dokumente (sub-5ms bei 768-dim, SIMD-beschleunigt)
+- [ ] sqlite-vec HNSW-Index beobachten; vec0 Flat-Scan genuegt bis ~10k Dokumente (sub-5ms bei 1024-dim, SIMD-beschleunigt)
 - [ ] Re-Embedding-Job wenn das Embedding-Modell wechselt
 - [ ] Metrics-Endpoint (Prometheus)
 - [ ] Bulk-Approve in der Review-GUI

@@ -411,10 +411,10 @@ class TestDocumentSummary:
         assert "My Content" in result
 
     def test_content_truncated_at_default(self):
-        """Total output should be limited to embed_max_chars (default 1000)."""
-        doc = _make_doc(1, content="x" * 2000)
+        """Total output should be limited to embed_max_chars (default 6000)."""
+        doc = _make_doc(1, content="x" * 10000)
         result = document_summary(doc)
-        assert len(result) <= 1000
+        assert len(result) <= 6000
 
     def test_content_truncated_at_custom_limit(self, monkeypatch):
         """Total truncation should respect a custom embed_max_chars value."""

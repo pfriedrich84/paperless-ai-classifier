@@ -76,7 +76,7 @@ cp .env.example .env
 
 # 2. Ollama-Modelle ziehen (auf dem Ollama-Host)
 ollama pull gemma4:e2b
-ollama pull nomic-embed-text-v2-moe
+ollama pull qwen3-embedding:0.6b
 
 # 3. Starten
 docker compose up -d

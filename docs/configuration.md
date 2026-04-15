@@ -54,9 +54,9 @@ Jede Stufe faengt Fehler ab und faellt auf die naechst niedrigere zurueck.
 
 | Variable | Default | Beschreibung |
 |---|---|---|
-| `OLLAMA_EMBED_MODEL` | `nomic-embed-text-v2-moe` | Embedding-Modell (multilingual DE/EN) |
-| `OLLAMA_EMBED_NUM_CTX` | `512` | Kontextfenster fuer das Embedding-Modell (Tokens) |
-| `EMBED_MAX_CHARS` | `1000` | Max. Zeichen des Dokumenttexts fuer Embedding |
+| `OLLAMA_EMBED_MODEL` | `qwen3-embedding:0.6b` | Embedding-Modell (1024-dim, multilingual DE/EN) |
+| `OLLAMA_EMBED_NUM_CTX` | `8192` | Kontextfenster fuer das Embedding-Modell (Tokens, Modell unterstuetzt 32K) |
+| `EMBED_MAX_CHARS` | `6000` | Max. Zeichen des Dokumenttexts fuer Embedding |
 | `OLLAMA_EMBED_RETRIES` | `3` | Max. Retries bei Embedding-Fehlern (Truncation + transiente 500er) |
 | `OLLAMA_EMBED_RETRY_BASE_DELAY` | `1.0` | Basis-Delay in Sekunden fuer exponentiellen Backoff |
 
