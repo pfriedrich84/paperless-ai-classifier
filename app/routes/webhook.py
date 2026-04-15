@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import secrets
 
 import structlog
@@ -21,10 +22,81 @@ from app.worker import _process_document
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/webhook")
 
+# Max bytes of raw body to include in debug log (avoid flooding logs with PDF data)
+_LOG_BODY_MAX = 2000
+
 
 # ---------------------------------------------------------------------------
 # Payload helpers
 # ---------------------------------------------------------------------------
+async def _parse_webhook_body(request: Request, endpoint: str) -> dict:
+    """Parse the webhook request body, handling both JSON and multipart/form-data.
+
+    Paperless-NGX can optionally attach the document file to webhook calls
+    ("Dokument einbeziehen"), which sends the request as multipart/form-data
+    instead of application/json.  The JSON payload is then in a form field.
+
+    Logs Content-Type and payload for debugging.
+    """
+    content_type = request.headers.get("content-type", "")
+    log.info(
+        f"{endpoint} request received",
+        content_type=content_type,
+        method=request.method,
+        url=str(request.url),
+    )
+
+    body: dict = {}
+
+    if "multipart/form-data" in content_type:
+        # Multipart: Paperless puts the payload in form fields alongside the file
+        form = await request.form()
+        form_keys = list(form.keys())
+        log.info(f"{endpoint} multipart form fields", fields=form_keys)
+
+        # Try to find the JSON payload in form fields
+        # Paperless may send individual fields or a JSON blob
+        for key in form_keys:
+            value = form[key]
+            # Skip file uploads (UploadFile objects)
+            if hasattr(value, "read"):
+                log.info(f"{endpoint} skipping file field", field=key)
+                continue
+            # Try to parse string values as JSON
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, dict):
+                        body.update(parsed)
+                        log.info(
+                            f"{endpoint} parsed JSON from form field", field=key, payload=parsed
+                        )
+                        continue
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                # Store as plain key-value
+                body[key] = value
+
+        log.info(f"{endpoint} parsed multipart body", payload=body)
+        # Clean up file handles
+        await form.close()
+    else:
+        # JSON or other content types — read raw body for logging
+        raw = await request.body()
+        raw_preview = raw[:_LOG_BODY_MAX].decode("utf-8", errors="replace")
+        if len(raw) > _LOG_BODY_MAX:
+            raw_preview += f"... ({len(raw)} bytes total)"
+        log.info(f"{endpoint} raw body", size=len(raw), preview=raw_preview)
+
+        try:
+            body = json.loads(raw)
+        except (json.JSONDecodeError, ValueError) as exc:
+            log.warning(f"{endpoint} JSON parse failed", error=str(exc))
+            body = {}
+
+    return body
+
+
 def _extract_document_id(body: dict) -> int | None:
     """Extract document_id from various Paperless webhook payload formats.
 
@@ -84,7 +156,7 @@ async def webhook_new(
         log.warning("webhook auth failed")
         return auth_error
 
-    body = await request.json()
+    body = await _parse_webhook_body(request, "webhook/new")
     doc_id = _extract_document_id(body)
     if doc_id is None:
         log.warning("webhook payload missing document id", payload=body)
@@ -154,7 +226,7 @@ async def webhook_edit(
         log.warning("webhook/edit auth failed")
         return auth_error
 
-    body = await request.json()
+    body = await _parse_webhook_body(request, "webhook/edit")
     doc_id = _extract_document_id(body)
     if doc_id is None:
         log.warning("webhook/edit payload missing document id", payload=body)

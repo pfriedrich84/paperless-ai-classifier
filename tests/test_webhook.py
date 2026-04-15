@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -216,3 +217,76 @@ class TestWebhookEdit:
         r = client.get("/embeddings")
         assert r.status_code == 200
         assert "Embeddings" in r.text
+
+
+# ---------------------------------------------------------------------------
+# Multipart/form-data tests (Paperless "include document" option)
+# ---------------------------------------------------------------------------
+class TestWebhookMultipart:
+    """Test webhook endpoints with multipart/form-data payloads.
+
+    When Paperless-NGX has "Dokument einbeziehen" enabled, webhooks send
+    multipart/form-data with the PDF attached instead of plain JSON.
+    """
+
+    @patch("app.routes.webhook._process_document", new_callable=AsyncMock)
+    def test_new_multipart_with_json_field(self, mock_process, client):
+        """webhook/new should parse document_id from a JSON form field."""
+        payload = json.dumps({"event": "document_created", "object": {"id": 42}})
+        r = client.post(
+            "/webhook/new",
+            data={"payload": payload},
+            files={"document": ("test.pdf", b"%PDF-1.4 fake content", "application/pdf")},
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
+        mock_process.assert_awaited_once()
+
+    @patch("app.routes.webhook.maybe_correct_ocr", new_callable=AsyncMock, return_value=("text", 0))
+    @patch("app.routes.webhook.context_builder")
+    def test_edit_multipart_with_json_field(self, mock_cb, _mock_ocr, client):
+        """webhook/edit should parse document_id from a JSON form field."""
+        mock_cb.document_summary.return_value = "Test summary"
+        mock_cb.store_embedding = AsyncMock()
+        payload = json.dumps({"event": "document_updated", "object": {"id": 42}})
+        r = client.post(
+            "/webhook/edit",
+            data={"payload": payload},
+            files={"document": ("test.pdf", b"%PDF-1.4 fake content", "application/pdf")},
+        )
+        assert r.status_code == 200
+        assert r.json()["action"] == "reembedded"
+
+    @patch("app.routes.webhook._process_document", new_callable=AsyncMock)
+    def test_new_multipart_plain_fields(self, mock_process, client):
+        """webhook/new should handle plain form fields (document_id as string)."""
+        r = client.post(
+            "/webhook/new",
+            data={"document_id": "42"},
+            files={"document": ("test.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
+
+    def test_edit_multipart_no_document_id(self, client):
+        """webhook/edit should return 422 when multipart has no document_id."""
+        r = client.post(
+            "/webhook/edit",
+            data={"irrelevant": "data"},
+            files={"document": ("test.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+        assert r.status_code == 422
+
+    @patch("app.routes.webhook._process_document", new_callable=AsyncMock)
+    def test_new_multipart_binary_pdf_no_crash(self, mock_process, client):
+        """webhook/new must not crash on binary PDF data with invalid UTF-8."""
+        # Simulate the exact bytes that caused the UnicodeDecodeError
+        binary_pdf = b"%PDF-1.4\xff\xd9\xda\x00\x01\x02 binary JBIG2 data"
+        payload = json.dumps({"document_id": 42})
+        r = client.post(
+            "/webhook/new",
+            data={"payload": payload},
+            files={"document": ("scan.pdf", binary_pdf, "application/pdf")},
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "ok"
