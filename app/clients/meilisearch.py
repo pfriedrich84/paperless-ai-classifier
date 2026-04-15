@@ -57,7 +57,6 @@ class MeiliClient:
     async def ensure_index(self, embed_dim: int) -> None:
         """Create or update the documents index with vector + search config."""
         from meilisearch_python_sdk.models.settings import (
-            Embedders,
             MeilisearchSettings,
             UserProvidedEmbedder,
         )
@@ -65,14 +64,12 @@ class MeiliClient:
         index_settings = MeilisearchSettings(
             searchable_attributes=["title", "content"],
             filterable_attributes=["tags", "correspondent", "document_type", "storage_path", "id"],
-            embedders=Embedders(
-                embedders={
-                    "ollama": UserProvidedEmbedder(
-                        source="userProvided",
-                        dimensions=embed_dim,
-                    ),
-                }
-            ),
+            embedders={
+                "ollama": UserProvidedEmbedder(
+                    source="userProvided",
+                    dimensions=embed_dim,
+                ),
+            },
         )
 
         try:
