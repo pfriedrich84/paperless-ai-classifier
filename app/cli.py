@@ -80,13 +80,19 @@ async def cmd_reindex_ocr(*, force: bool = False) -> None:
 
 async def cmd_reindex_embed() -> None:
     """Rebuild embeddings only (skip OCR, use cached OCR text if available)."""
-    from app.db import get_conn
+    from app.db import EMBED_DIM, get_conn
     from app.indexer import initial_index
 
-    # Clear existing embeddings
+    # Drop + recreate so dimension changes take effect
     with get_conn() as conn:
         conn.execute("DELETE FROM doc_embedding_meta")
-        conn.execute("DELETE FROM doc_embeddings")
+        conn.execute("DROP TABLE IF EXISTS doc_embeddings")
+        conn.execute(
+            f"""CREATE VIRTUAL TABLE doc_embeddings USING vec0(
+                document_id INTEGER PRIMARY KEY,
+                embedding   FLOAT[{EMBED_DIM}]
+            )"""
+        )
     print("Cleared existing embeddings.")
 
     paperless = PaperlessClient()

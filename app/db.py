@@ -14,8 +14,8 @@ from app.config import settings
 
 log = structlog.get_logger(__name__)
 
-# Embedding dimension for nomic-embed-text-v2-moe = 768. Change if you switch models.
-EMBED_DIM = 768
+# Embedding dimension for qwen3-embedding:0.6b = 1024. Change if you switch models.
+EMBED_DIM = 1024
 
 
 SCHEMA = f"""

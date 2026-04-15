@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.db import init_db
+from app.db import EMBED_DIM, init_db
 from app.main import app, templates
 from app.models import PaperlessDocument
 from app.routes.webhook import _extract_document_id
@@ -79,7 +79,7 @@ def _setup_app(tmp_path, monkeypatch):
     mock_paperless.list_tags = AsyncMock(return_value=[])
 
     mock_ollama = AsyncMock()
-    mock_ollama.embed = AsyncMock(return_value=[0.1] * 768)
+    mock_ollama.embed = AsyncMock(return_value=[0.1] * EMBED_DIM)
 
     app.state.paperless = mock_paperless
     app.state.ollama = mock_ollama

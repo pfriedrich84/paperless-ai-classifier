@@ -11,7 +11,7 @@ import structlog
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
-from app.db import get_conn
+from app.db import EMBED_DIM, get_conn
 from app.pipeline.context_builder import index_document
 from app.pipeline.ocr_correction import (
     cache_ocr_correction,
@@ -150,7 +150,14 @@ async def reindex_all(
         log.info("starting full reindex — clearing existing embeddings")
         with get_conn() as conn:
             conn.execute("DELETE FROM doc_embedding_meta")
-            conn.execute("DELETE FROM doc_embeddings")
+            # Drop + recreate vec0 table so dimension changes take effect
+            conn.execute("DROP TABLE IF EXISTS doc_embeddings")
+            conn.execute(
+                f"""CREATE VIRTUAL TABLE doc_embeddings USING vec0(
+                    document_id INTEGER PRIMARY KEY,
+                    embedding   FLOAT[{EMBED_DIM}]
+                )"""
+            )
 
         # --- Phase 0: OCR correction (before embedding) ---
         ocr_mode = effective_ocr_mode()

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # --- Ollama ---
     ollama_url: str = "http://ollama:11434"
     ollama_model: str = "gemma4:e2b"
-    ollama_embed_model: str = "nomic-embed-text-v2-moe"
+    ollama_embed_model: str = "qwen3-embedding:0.6b"
     ollama_ocr_model: str = "gemma4:e2b"
     ollama_timeout_seconds: int = 300
     ollama_embed_retries: int = 3
@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     poll_interval_seconds: int = 300
     context_max_docs: int = 5
     max_doc_chars: int = 32000
-    embed_max_chars: int = 1000
+    embed_max_chars: int = 6000
     auto_commit_confidence: int = 0  # 0 = immer manuell reviewen
     enable_ocr_correction: bool = False  # deprecated, use ocr_mode instead
 
@@ -273,7 +273,7 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Phase 2: Embedding",
         "Embedding Model",
         restart="component",
-        help="Ollama model for embeddings (e.g. nomic-embed-text-v2-moe)",
+        help="Ollama model for embeddings (e.g. qwen3-embedding:0.6b)",
     ),
     "ollama_embed_num_ctx": _fm(
         "Phase 2: Embedding",

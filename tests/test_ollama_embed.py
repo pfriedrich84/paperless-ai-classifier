@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from app.clients.ollama import OllamaClient
+from app.db import EMBED_DIM
 
 
 def _make_response(
@@ -38,7 +39,7 @@ def client() -> OllamaClient:
 
 async def test_embed_succeeds_without_retry(client: OllamaClient):
     """Successful embed on first attempt — no retries needed."""
-    embedding = [0.1] * 768
+    embedding = [0.1] * EMBED_DIM
     client._client.post = AsyncMock(return_value=_make_response(200, {"embedding": embedding}))
 
     result = await client.embed("hello world")
@@ -50,7 +51,7 @@ async def test_embed_succeeds_without_retry(client: OllamaClient):
 
 async def test_embed_retries_on_transient_500_then_succeeds(client: OllamaClient):
     """Transient 500 (not context-length) triggers backoff retry."""
-    embedding = [0.1] * 768
+    embedding = [0.1] * EMBED_DIM
     client._client.post = AsyncMock(
         side_effect=[
             _make_response(500, text='{"error": "internal error"}'),
@@ -102,7 +103,7 @@ async def test_embed_no_retry_on_4xx(client: OllamaClient):
 
 async def test_embed_retries_on_429(client: OllamaClient):
     """429 rate limit triggers retry."""
-    embedding = [0.1] * 768
+    embedding = [0.1] * EMBED_DIM
     client._client.post = AsyncMock(
         side_effect=[
             _make_response(429, text="rate limited"),
@@ -119,7 +120,7 @@ async def test_embed_retries_on_429(client: OllamaClient):
 
 async def test_embed_retries_on_connect_error(client: OllamaClient):
     """ConnectError triggers retry."""
-    embedding = [0.1] * 768
+    embedding = [0.1] * EMBED_DIM
     client._client.post = AsyncMock(
         side_effect=[
             httpx.ConnectError("connection refused"),
@@ -137,7 +138,7 @@ async def test_embed_retries_on_connect_error(client: OllamaClient):
 async def test_embed_context_length_error_truncates_and_retries(client: OllamaClient):
     """Context-length 500 triggers text truncation (no backoff) and retries."""
     long_text = "a" * 2000
-    embedding = [0.1] * 768
+    embedding = [0.1] * EMBED_DIM
 
     client._client.post = AsyncMock(
         side_effect=[
@@ -158,7 +159,7 @@ async def test_embed_context_length_error_truncates_and_retries(client: OllamaCl
 async def test_embed_context_length_progressive_truncation(client: OllamaClient):
     """Multiple context-length errors cause progressive truncation."""
     long_text = "a" * 2000
-    embedding = [0.1] * 768
+    embedding = [0.1] * EMBED_DIM
 
     client._client.post = AsyncMock(
         side_effect=[

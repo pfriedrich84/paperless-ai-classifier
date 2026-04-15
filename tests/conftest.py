@@ -18,7 +18,7 @@ os.environ.setdefault("PAPERLESS_TOKEN", "test-token")
 os.environ.setdefault("PAPERLESS_INBOX_TAG_ID", "99")
 os.environ.setdefault("DATA_DIR", tempfile.mkdtemp())
 
-from app.db import SCHEMA
+from app.db import EMBED_DIM, SCHEMA
 from app.models import PaperlessDocument, PaperlessEntity
 
 
@@ -180,5 +180,5 @@ def mock_ollama() -> AsyncMock:
             "reasoning": "Erkannt als Stromrechnung",
         }
     )
-    client.embed = AsyncMock(return_value=[0.1] * 768)
+    client.embed = AsyncMock(return_value=[0.1] * EMBED_DIM)
     return client
