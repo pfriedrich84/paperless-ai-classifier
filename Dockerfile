@@ -1,7 +1,3 @@
-# Stage 1: Grab the Meilisearch binary from the official image
-FROM getmeili/meilisearch:v1.42.1 AS meilisearch
-
-# Stage 2: Application
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -21,9 +17,6 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Meilisearch binary (hybrid search sidecar)
-COPY --from=meilisearch /bin/meilisearch /usr/local/bin/meilisearch
-
 # Dependencies (pinned with constraints for supply-chain protection)
 COPY pyproject.toml constraints.txt ./
 RUN pip install --upgrade pip setuptools wheel \
@@ -40,8 +33,7 @@ RUN pip install --upgrade pip setuptools wheel \
         "structlog>=24.4.0" \
         "sqlite-vec>=0.1.3,<=0.1.7" \
         "mcp[cli]>=1.20.0,<=1.26.0" \
-        "pymupdf>=1.24.0,<=1.27.2.2" \
-        "meilisearch-python-sdk>=7.0.0,<=7.1.2"
+        "pymupdf>=1.24.0,<=1.27.2.2"
 
 # App
 COPY app ./app

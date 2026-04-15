@@ -200,7 +200,6 @@ class TestProcessDocumentReturn:
             doc,
             AsyncMock(),  # paperless (unused for skip path)
             AsyncMock(),  # ollama (unused for skip path)
-            AsyncMock(),  # meili (unused for skip path)
             [],
             [],
             [],
@@ -234,7 +233,6 @@ class TestProcessDocumentReturn:
                 doc,
                 AsyncMock(),
                 AsyncMock(),
-                AsyncMock(),  # meili
                 [],
                 [],
                 [],
@@ -279,7 +277,6 @@ class TestPollCycleSummary:
         with (
             patch("app.worker._paperless", mock_paperless),
             patch("app.worker._ollama", AsyncMock()),
-            patch("app.worker._meili", AsyncMock()),
             patch("app.worker._has_embedding_index", return_value=True),
             structlog.testing.capture_logs() as logs,
         ):
@@ -318,10 +315,7 @@ class TestPhaseEmbed:
         mock_ollama.embed_model = "nomic-embed-text-v2-moe"
         mock_ollama.unload_model = AsyncMock()
         mock_paperless = AsyncMock()
-        mock_meili = AsyncMock()
-        mock_meili.vector_search = AsyncMock(return_value=[])
-
-        results = await _phase_embed(docs, mock_paperless, mock_ollama, mock_meili)
+        results = await _phase_embed(docs, mock_paperless, mock_ollama)
 
         # Exactly 3 embed calls — one per doc
         assert mock_ollama.embed.call_count == 3
@@ -335,9 +329,8 @@ class TestPhaseEmbed:
         mock_ollama.embed = AsyncMock(side_effect=RuntimeError("model unavailable"))
         mock_ollama.embed_model = "nomic-embed-text-v2-moe"
         mock_ollama.unload_model = AsyncMock()
-        mock_meili = AsyncMock()
 
-        results = await _phase_embed(docs, AsyncMock(), mock_ollama, mock_meili)
+        results = await _phase_embed(docs, AsyncMock(), mock_ollama)
 
         assert results[1].embedding is None
         assert results[1].similar_results == []
@@ -349,10 +342,7 @@ class TestPhaseEmbed:
         mock_ollama.embed = AsyncMock(return_value=[0.1] * 768)
         mock_ollama.embed_model = "nomic-embed-text-v2-moe"
         mock_ollama.unload_model = AsyncMock()
-        mock_meili = AsyncMock()
-        mock_meili.vector_search = AsyncMock(return_value=[])
-
-        await _phase_embed([_make_doc(1)], AsyncMock(), mock_ollama, mock_meili)
+        await _phase_embed([_make_doc(1)], AsyncMock(), mock_ollama)
 
         mock_ollama.unload_model.assert_called_once_with("nomic-embed-text-v2-moe")
 
@@ -457,7 +447,7 @@ class TestPhaseClassify:
             mock_store.return_value = AsyncMock(id=1, proposed_correspondent_id=None)
 
             _classified, _auto_committed, _errored = await _phase_classify(
-                [doc], embed_results, AsyncMock(), mock_ollama, AsyncMock(), [], [], [], []
+                [doc], embed_results, AsyncMock(), mock_ollama, [], [], [], []
             )
 
         # Verify classify was called with the context doc from embedding phase
@@ -496,7 +486,6 @@ class TestPhaseClassify:
                 {1: _EmbeddingResult()},
                 AsyncMock(),
                 mock_ollama,
-                AsyncMock(),
                 [],
                 [],
                 [],
@@ -523,15 +512,14 @@ class TestPhaseClassify:
             patch("app.worker.context_builder.store_embedding") as mock_store_emb,
             patch("app.worker.settings") as mock_settings,
         ):
-            mock_meili = AsyncMock()
             mock_settings.auto_commit_confidence = 0
             _classified, _auto_committed, errored = await _phase_classify(
-                [doc], embed_results, AsyncMock(), mock_ollama, mock_meili, [], [], [], []
+                [doc], embed_results, AsyncMock(), mock_ollama, [], [], [], []
             )
 
         assert errored == 1
         # Embedding should still be stored despite classification failure
-        mock_store_emb.assert_called_once_with(doc, [0.1] * 768, mock_meili)
+        mock_store_emb.assert_called_once_with(doc, [0.1] * 768)
 
 
 class TestPhasedPollInbox:
@@ -575,12 +563,9 @@ class TestPhasedPollInbox:
         mock_paperless.list_storage_paths = AsyncMock(return_value=[])
         mock_paperless.list_tags = AsyncMock(return_value=[])
 
-        mock_meili = AsyncMock()
-        mock_meili.vector_search = AsyncMock(return_value=[])
         with (
             patch("app.worker._paperless", mock_paperless),
             patch("app.worker._ollama", mock_ollama),
-            patch("app.worker._meili", mock_meili),
             patch("app.worker._has_embedding_index", return_value=True),
             patch("app.worker.notify_suggestion"),
             patch("app.worker.context_builder.store_embedding"),

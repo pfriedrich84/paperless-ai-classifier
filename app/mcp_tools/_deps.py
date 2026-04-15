@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from mcp.server.fastmcp import Context
 
-from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.mcp_tools._auth import RateLimiter
@@ -16,7 +15,6 @@ from app.mcp_tools._auth import RateLimiter
 class Deps:
     paperless: PaperlessClient
     ollama: OllamaClient
-    meili: MeiliClient
     rate_limiter: RateLimiter
 
 
