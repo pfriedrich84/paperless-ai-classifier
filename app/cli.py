@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 import sys
 from pathlib import Path
 
@@ -119,9 +120,23 @@ async def cmd_poll() -> None:
     worker._paperless = paperless
     worker._ollama = ollama
 
+    # Wire Ctrl+C to the worker's cooperative cancellation flag
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(
+        signal.SIGINT,
+        lambda: (
+            setattr(worker._poll_progress, "cancelled", True),
+            print("\nInterrupting after current document… (press Ctrl+C again to force)"),
+            loop.remove_signal_handler(signal.SIGINT),
+        ),
+    )
+
     try:
         await poll_inbox()
-        print("Inbox processing complete.")
+        if worker._poll_progress.cancelled:
+            print("Inbox processing cancelled.")
+        else:
+            print("Inbox processing complete.")
     finally:
         await paperless.aclose()
         await ollama.aclose()
@@ -205,10 +220,14 @@ def main() -> None:
     force = "--force" in extra_args
 
     _, cmd_func = COMMANDS[cmd_name]
-    if cmd_name == "reindex-ocr":
-        asyncio.run(cmd_func(force=force))
-    else:
-        asyncio.run(cmd_func())
+    try:
+        if cmd_name == "reindex-ocr":
+            asyncio.run(cmd_func(force=force))
+        else:
+            asyncio.run(cmd_func())
+    except KeyboardInterrupt:
+        print("\nAborted.")
+        sys.exit(130)
 
 
 if __name__ == "__main__":
