@@ -121,16 +121,17 @@ def _find_similar_ids(
     blob = _serialize_embedding(embedding)
     with get_conn() as conn:
         if exclude_id is not None:
+            # Over-fetch by 1 because the excluded doc may be in the top-k
             rows = conn.execute(
                 """
                 SELECT document_id, distance
                   FROM doc_embeddings
                  WHERE embedding MATCH ?
+                   AND k = ?
                    AND document_id != ?
                  ORDER BY distance
-                 LIMIT ?
                 """,
-                (blob, exclude_id, limit),
+                (blob, limit + 1, exclude_id),
             ).fetchall()
         else:
             rows = conn.execute(
@@ -138,12 +139,13 @@ def _find_similar_ids(
                 SELECT document_id, distance
                   FROM doc_embeddings
                  WHERE embedding MATCH ?
+                   AND k = ?
                  ORDER BY distance
-                 LIMIT ?
                 """,
                 (blob, limit),
             ).fetchall()
     pairs = [(row["document_id"], row["distance"]) for row in rows]
+    pairs = pairs[:limit]
     if max_distance > 0:
         pairs = [(doc_id, dist) for doc_id, dist in pairs if dist <= max_distance]
     return pairs
