@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # --- Ollama ---
     ollama_url: str = "http://ollama:11434"
     ollama_model: str = "gemma4:e2b"
-    ollama_embed_model: str = "nomic-embed-text-v2-moe"
+    ollama_embed_model: str = "qwen3-embedding:0.6b"
     ollama_ocr_model: str = "gemma4:e2b"
     ollama_timeout_seconds: int = 300
     ollama_embed_retries: int = 3
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     context_max_distance: float = 0.0  # 0 = no threshold; e.g. 1.5 filters irrelevant docs
     hybrid_search_weight: float = 0.7  # 0.0 = FTS only, 1.0 = vector only, 0.7 = default blend
     max_doc_chars: int = 32000
-    embed_max_chars: int = 1000
+    embed_max_chars: int = 6000
     auto_commit_confidence: int = 0  # 0 = immer manuell reviewen
     enable_ocr_correction: bool = False  # deprecated, use ocr_mode instead
 
@@ -275,13 +275,13 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Phase 2: Embedding",
         "Embedding Model",
         restart="component",
-        help="Ollama model for embeddings (e.g. nomic-embed-text-v2-moe)",
+        help="Ollama model for embeddings (e.g. qwen3-embedding:0.6b)",
     ),
     "ollama_embed_num_ctx": _fm(
         "Phase 2: Embedding",
         "Context Window (tokens)",
         "number",
-        help="num_ctx for the embedding model (nomic-embed-text-v2-moe supports up to 8192)",
+        help="num_ctx for the embedding model (Ollama may clamp to model's n_ctx_train — check Ollama logs)",
     ),
     "embed_max_chars": _fm(
         "Phase 2: Embedding",

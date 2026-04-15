@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import structlog
 
+from app.db import EMBED_DIM
 from app.models import PaperlessDocument
 from app.worker import (
     _phase_classify,
@@ -311,7 +312,7 @@ class TestPhaseEmbed:
         """Each document should be embedded exactly once (not twice like before)."""
         docs = [_make_doc(1), _make_doc(2), _make_doc(3)]
         mock_ollama = AsyncMock()
-        mock_ollama.embed = AsyncMock(return_value=[0.1] * 768)
+        mock_ollama.embed = AsyncMock(return_value=[0.1] * EMBED_DIM)
         mock_ollama.embed_model = "nomic-embed-text-v2-moe"
         mock_ollama.unload_model = AsyncMock()
         mock_paperless = AsyncMock()
@@ -339,7 +340,7 @@ class TestPhaseEmbed:
     async def test_unload_called_after_embed_phase(self):
         """The embed model should be unloaded at the end of the phase."""
         mock_ollama = AsyncMock()
-        mock_ollama.embed = AsyncMock(return_value=[0.1] * 768)
+        mock_ollama.embed = AsyncMock(return_value=[0.1] * EMBED_DIM)
         mock_ollama.embed_model = "nomic-embed-text-v2-moe"
         mock_ollama.unload_model = AsyncMock()
         await _phase_embed([_make_doc(1)], AsyncMock(), mock_ollama)
@@ -416,7 +417,7 @@ class TestPhaseClassify:
 
         embed_results = {
             1: _EmbeddingResult(
-                embedding=[0.1] * 768,
+                embedding=[0.1] * EMBED_DIM,
                 similar_results=[SimilarDocument(document=context_doc, distance=0.2)],
             )
         }
@@ -500,7 +501,7 @@ class TestPhaseClassify:
         from app.worker import _EmbeddingResult
 
         doc = _make_doc(1)
-        embed_results = {1: _EmbeddingResult(embedding=[0.1] * 768, similar_results=[])}
+        embed_results = {1: _EmbeddingResult(embedding=[0.1] * EMBED_DIM, similar_results=[])}
 
         mock_ollama = AsyncMock()
         mock_ollama.model = "gemma3:4b"
@@ -519,7 +520,7 @@ class TestPhaseClassify:
 
         assert errored == 1
         # Embedding should still be stored despite classification failure
-        mock_store_emb.assert_called_once_with(doc, [0.1] * 768)
+        mock_store_emb.assert_called_once_with(doc, [0.1] * EMBED_DIM)
 
 
 class TestPhasedPollInbox:
@@ -533,7 +534,7 @@ class TestPhasedPollInbox:
 
         async def track_embed(text):
             call_order.append("embed")
-            return [0.1] * 768
+            return [0.1] * EMBED_DIM
 
         async def track_chat_json(**kwargs):
             call_order.append("chat_json")

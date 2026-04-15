@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.config import settings
+from app.db import EMBED_DIM
 from app.models import PaperlessDocument, PaperlessEntity
 from app.pipeline.context_builder import (
     document_summary,
@@ -269,7 +270,7 @@ class TestFindSimilarById:
         """Should return (doc_id, distance) tuples excluding source doc."""
         import struct
 
-        fake_embedding = struct.pack("768f", *([0.1] * 768))
+        fake_embedding = struct.pack(f"{EMBED_DIM}f", *([0.1] * EMBED_DIM))
         mock_conn = MagicMock()
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=False)
@@ -313,7 +314,7 @@ class TestFindSimilarWithPrecomputedEmbedding:
         """Should use the provided embedding without calling ollama.embed()."""
         doc_a = _make_doc(10)
         target = _make_doc(42, inbox=True)
-        embedding = [0.1] * 768
+        embedding = [0.1] * EMBED_DIM
 
         paperless = AsyncMock()
         paperless.get_document = AsyncMock(return_value=doc_a)
@@ -335,7 +336,7 @@ class TestFindSimilarWithPrecomputedEmbedding:
         """exclude_id should be passed to the KNN search."""
         doc_a = _make_doc(10)
         target = _make_doc(42, inbox=True)
-        embedding = [0.1] * 768
+        embedding = [0.1] * EMBED_DIM
 
         paperless = AsyncMock()
         paperless.get_document = AsyncMock(return_value=doc_a)
@@ -352,7 +353,7 @@ class TestFindSimilarWithPrecomputedEmbedding:
     async def test_empty_results(self):
         """Should return empty list when KNN returns no hits."""
         target = _make_doc(42, inbox=True)
-        embedding = [0.1] * 768
+        embedding = [0.1] * EMBED_DIM
 
         paperless = AsyncMock()
 
@@ -378,7 +379,7 @@ class TestStoreEmbedding:
             document_type=10,
             tags=[99],
         )
-        embedding = [0.1] * 768
+        embedding = [0.1] * EMBED_DIM
 
         mock_conn = MagicMock()
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
@@ -414,10 +415,10 @@ class TestDocumentSummary:
         assert "My Content" in result
 
     def test_content_truncated_at_default(self):
-        """Total output should be limited to embed_max_chars (default 1000)."""
-        doc = _make_doc(1, content="x" * 2000)
+        """Total output should be limited to embed_max_chars (default 6000)."""
+        doc = _make_doc(1, content="x" * 10000)
         result = document_summary(doc)
-        assert len(result) <= 1000
+        assert len(result) <= 6000
 
     def test_content_truncated_at_custom_limit(self, monkeypatch):
         """Total truncation should respect a custom embed_max_chars value."""

@@ -121,7 +121,7 @@ Nur aktiv bei `ENABLE_OCR_CORRECTION=true`. Heuristik prueft ob der Text typisch
 
 ### 3. Kontext-Suche
 
-- Berechnet Embedding des Zieldokuments via Ollama (`nomic-embed-text-v2-moe`, 768-dim)
+- Berechnet Embedding des Zieldokuments via Ollama (`qwen3-embedding:0.6b`, 1024-dim)
 - KNN-Suche in `doc_embeddings` (sqlite-vec) findet die aehnlichsten Dokumente
 - **Wichtig:** Dokumente die noch im Posteingang liegen werden als Kontext ausgeschlossen — nur reviewte/bestaetigte Dokumente mit zuverlaessigen Metadaten dienen als Referenz
 - Kontext-Dokumente enthalten ihre vollstaendige Klassifikation (Korrespondent, Dokumenttyp, Tags, Speicherpfad)
@@ -160,7 +160,7 @@ Der Embedding-Index kann ueber die Settings-Seite komplett neu aufgebaut werden 
 |---|---|
 | `processed_documents` | Verarbeitungsstatus pro Dokument (Idempotenz) |
 | `suggestions` | LLM-Vorschlaege (original vs. proposed, Status pending/committed/rejected) |
-| `doc_embeddings` | Virtuelle sqlite-vec Tabelle fuer Vektor-Similarity (768-dim) |
+| `doc_embeddings` | Virtuelle sqlite-vec Tabelle fuer Vektor-Similarity (1024-dim) |
 | `doc_embedding_meta` | Metadaten zu Embeddings (document_id, title, created_at) |
 | `tag_whitelist` | Staging fuer unbekannte Tags (name, times_seen, approved) |
 | `errors` | Fehler-Audit-Trail (stage, document_id, message) |
