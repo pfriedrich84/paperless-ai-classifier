@@ -59,7 +59,7 @@ async def _ensure_meili(meili: MeiliClient) -> bool:
 
     # Binary not installed (e.g. local dev without Docker) → skip
     binary = shutil.which("meilisearch")
-    if not binary:
+    if not binary or not Path(binary).is_file():
         return False
 
     parsed = urlparse(settings.meilisearch_url)
@@ -81,7 +81,11 @@ async def _ensure_meili(meili: MeiliClient) -> bool:
         cmd += ["--master-key", settings.meilisearch_api_key]
 
     print(f"Starting Meilisearch ({host}:{port}) ...")
-    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as exc:
+        print(f"Warning: failed to start Meilisearch: {exc}")
+        return False
 
     for _ in range(10):
         await asyncio.sleep(1)
