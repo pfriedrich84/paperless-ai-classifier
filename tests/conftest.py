@@ -28,7 +28,8 @@ def tmp_db(tmp_path: Path) -> Path:
     db_path = tmp_path / "test.db"
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
-    # Strip the vec0 virtual table — it requires the sqlite-vec extension loaded
+    # Strip virtual tables — they require extensions not available in tests
+    # (vec0 requires sqlite-vec, FTS5 may not be compiled into all builds)
     # We keep all other tables including doc_embedding_meta
     import re
 
@@ -36,6 +37,12 @@ def tmp_db(tmp_path: Path) -> Path:
         r"CREATE VIRTUAL TABLE IF NOT EXISTS doc_embeddings.*?;",
         "",
         SCHEMA,
+        flags=re.DOTALL,
+    )
+    schema_no_vec = re.sub(
+        r"CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts.*?;",
+        "",
+        schema_no_vec,
         flags=re.DOTALL,
     )
     conn.executescript(schema_no_vec)

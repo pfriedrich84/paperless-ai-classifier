@@ -147,7 +147,7 @@ async def reindex_all(
     Use this when the embedding model changes.
     """
     try:
-        log.info("starting full reindex — clearing existing embeddings")
+        log.info("starting full reindex — clearing existing embeddings and FTS index")
         with get_conn() as conn:
             conn.execute("DELETE FROM doc_embedding_meta")
             # Drop + recreate vec0 table so dimension changes take effect
@@ -158,6 +158,7 @@ async def reindex_all(
                     embedding   FLOAT[{EMBED_DIM}]
                 )"""
             )
+            conn.execute("DELETE FROM doc_fts")
 
         # --- Phase 0: OCR correction (before embedding) ---
         ocr_mode = effective_ocr_mode()

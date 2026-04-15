@@ -16,8 +16,13 @@ import structlog
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
-from app.pipeline.classifier import _format_context_block
-from app.pipeline.context_builder import find_similar_by_query_text
+from app.models import PaperlessEntity
+from app.pipeline.classifier import (
+    _estimate_tokens,
+    _format_context_block,
+    _tokens_to_chars,
+)
+from app.pipeline.context_builder import SimilarDocument, find_similar_by_query_text
 
 log = structlog.get_logger(__name__)
 
@@ -29,9 +34,21 @@ MAX_HISTORY = 20  # max messages per session (10 exchanges)
 # Session management
 # ---------------------------------------------------------------------------
 @dataclass
+class _EntityCache:
+    """Cached Paperless entity lists — fetched once per session."""
+
+    correspondents: list[PaperlessEntity] = field(default_factory=list)
+    doctypes: list[PaperlessEntity] = field(default_factory=list)
+    storage_paths: list[PaperlessEntity] = field(default_factory=list)
+    tags: list[PaperlessEntity] = field(default_factory=list)
+    loaded: bool = False
+
+
+@dataclass
 class ChatSession:
     messages: list[dict[str, str]] = field(default_factory=list)
     last_active: float = field(default_factory=time.time)
+    entity_cache: _EntityCache = field(default_factory=_EntityCache)
 
 
 @dataclass
@@ -82,6 +99,75 @@ def _build_chat_user_message(question: str, context: str) -> str:
     return question
 
 
+def _budget_context_blocks(
+    similar: list[SimilarDocument],
+    system_prompt: str,
+    history: list[dict[str, str]],
+    question: str,
+    correspondents: list[PaperlessEntity],
+    doctypes: list[PaperlessEntity],
+    storage_paths: list[PaperlessEntity],
+    tags: list[PaperlessEntity],
+) -> str:
+    """Build context text for chat using dynamic token budgeting.
+
+    Mirrors the allocation strategy from ``classifier.build_user_prompt``:
+    estimate token usage for fixed parts (system prompt, history, question)
+    and distribute the remaining budget across context documents.
+    """
+    if not similar:
+        return ""
+
+    RESPONSE_RESERVE = 512
+    MIN_DOC_TOKENS = 100
+    num_ctx = settings.ollama_num_ctx
+
+    system_tokens = _estimate_tokens(system_prompt)
+    history_tokens = sum(_estimate_tokens(m["content"]) for m in history)
+    question_tokens = _estimate_tokens(question)
+    fixed_tokens = system_tokens + history_tokens + question_tokens + 80  # overhead
+
+    available_tokens = int((num_ctx - RESPONSE_RESERVE - fixed_tokens) * 0.85)
+    if available_tokens < 200:
+        available_tokens = 200
+
+    active = list(similar)
+    while active:
+        per_doc = available_tokens // len(active)
+        if per_doc >= MIN_DOC_TOKENS:
+            break
+        active.pop()  # drop least-similar (last) doc
+
+    if not active:
+        return ""
+
+    chars_per_doc = _tokens_to_chars(available_tokens // len(active))
+
+    blocks = []
+    for sim in active:
+        block = _format_context_block(
+            sim.document, chars_per_doc, correspondents, doctypes, storage_paths, tags
+        )
+        blocks.append(block)
+    return "\n".join(blocks)
+
+
+async def _ensure_entity_cache(session: ChatSession, paperless: PaperlessClient) -> _EntityCache:
+    """Fetch entity lists once per session, then reuse from cache."""
+    cache = session.entity_cache
+    if cache.loaded:
+        return cache
+    try:
+        cache.correspondents = await paperless.list_correspondents()
+        cache.doctypes = await paperless.list_document_types()
+        cache.storage_paths = await paperless.list_storage_paths()
+        cache.tags = await paperless.list_tags()
+    except Exception as exc:
+        log.warning("failed to fetch entity lists for chat", error=str(exc))
+    cache.loaded = True
+    return cache
+
+
 # ---------------------------------------------------------------------------
 # RAG pipeline
 # ---------------------------------------------------------------------------
@@ -101,24 +187,23 @@ async def ask(
         question, paperless, ollama, limit=settings.context_max_docs
     )
 
-    # 2. Build context block
+    # 2. Build context block with dynamic token budgeting
+    system_prompt = load_chat_system_prompt()
     context_text = ""
     if similar:
-        correspondents = await paperless.list_correspondents()
-        doctypes = await paperless.list_document_types()
-        storage_paths = await paperless.list_storage_paths()
-        tags_list = await paperless.list_tags()
-
-        doc_blocks = []
-        for sim in similar:
-            block = _format_context_block(
-                sim.document, 2000, correspondents, doctypes, storage_paths, tags_list
-            )
-            doc_blocks.append(block)
-        context_text = "\n".join(doc_blocks)
+        entities = await _ensure_entity_cache(session, paperless)
+        context_text = _budget_context_blocks(
+            similar,
+            system_prompt,
+            session.messages,
+            question,
+            entities.correspondents,
+            entities.doctypes,
+            entities.storage_paths,
+            entities.tags,
+        )
 
     # 3. Build messages list
-    system_prompt = load_chat_system_prompt()
     user_content = _build_chat_user_message(question, context_text)
 
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]

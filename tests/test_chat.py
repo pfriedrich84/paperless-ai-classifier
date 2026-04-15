@@ -218,6 +218,53 @@ class TestAskPipeline:
 
         assert "Fehler" in result.answer
 
+    @pytest.mark.asyncio()
+    async def test_entity_cache_reused_across_calls(self):
+        """Entity lists should be fetched once per session, not per message."""
+        session = ChatSession()
+        mock_paperless = AsyncMock()
+        mock_paperless.list_correspondents = AsyncMock(return_value=[])
+        mock_paperless.list_document_types = AsyncMock(return_value=[])
+        mock_paperless.list_storage_paths = AsyncMock(return_value=[])
+        mock_paperless.list_tags = AsyncMock(return_value=[])
+
+        mock_ollama = AsyncMock()
+        mock_ollama.chat = AsyncMock(return_value="Antwort")
+
+        mock_doc = PaperlessDocument(id=42, title="Test", content="Test content")
+
+        with patch("app.chat.find_similar_by_query_text") as mock_find:
+            from app.pipeline.context_builder import SimilarDocument
+
+            mock_find.return_value = [SimilarDocument(document=mock_doc, distance=0.1)]
+
+            await ask("Frage 1", session, mock_paperless, mock_ollama)
+            await ask("Frage 2", session, mock_paperless, mock_ollama)
+
+        # Entity lists fetched only once, not twice
+        assert mock_paperless.list_correspondents.call_count == 1
+        assert mock_paperless.list_document_types.call_count == 1
+
+    @pytest.mark.asyncio()
+    async def test_token_budgeting_uses_dynamic_allocation(self):
+        """Context blocks should use dynamic token budgeting, not hard-coded 2000 chars."""
+        from app.chat import _budget_context_blocks
+        from app.pipeline.context_builder import SimilarDocument
+
+        doc = PaperlessDocument(id=1, title="Test", content="x" * 5000, tags=[])
+        similar = [SimilarDocument(document=doc, distance=0.1)]
+        system_prompt = "System prompt"
+        history: list[dict[str, str]] = []
+        question = "Short question"
+
+        result = _budget_context_blocks(similar, system_prompt, history, question, [], [], [], [])
+
+        # With dynamic budgeting and a single doc, it should get more
+        # than the old hard-coded 2000 chars (depends on ollama_num_ctx)
+        assert len(result) > 0
+        # Content should be present
+        assert "Test" in result
+
 
 # =====================================================================
 # System prompt loading

@@ -369,8 +369,8 @@ class TestFindSimilarWithPrecomputedEmbedding:
 # store_embedding
 # ---------------------------------------------------------------------------
 class TestStoreEmbedding:
-    def test_writes_to_sqlite_and_meta(self):
-        """store_embedding should write to doc_embeddings and doc_embedding_meta."""
+    def test_writes_to_sqlite_meta_and_fts(self):
+        """store_embedding should write to doc_embeddings, doc_embedding_meta, and doc_fts."""
         doc = PaperlessDocument(
             id=42,
             title="Test Doc",
@@ -391,12 +391,16 @@ class TestStoreEmbedding:
         ):
             store_embedding(doc, embedding)
 
-        # Two SQL executions: doc_embeddings + doc_embedding_meta
-        assert mock_conn.execute.call_count == 2
+        # 4 SQL executions: doc_embeddings + doc_embedding_meta + FTS delete + FTS insert
+        assert mock_conn.execute.call_count == 4
         embed_sql = mock_conn.execute.call_args_list[0][0][0]
         assert "doc_embeddings" in embed_sql
         meta_sql = mock_conn.execute.call_args_list[1][0][0]
         assert "doc_embedding_meta" in meta_sql
+        fts_del_sql = mock_conn.execute.call_args_list[2][0][0]
+        assert "DELETE FROM doc_fts" in fts_del_sql
+        fts_ins_sql = mock_conn.execute.call_args_list[3][0][0]
+        assert "INSERT INTO doc_fts" in fts_ins_sql
 
 
 # ---------------------------------------------------------------------------
@@ -442,3 +446,108 @@ class TestDocumentSummary:
         doc = PaperlessDocument(id=1, title="", content="", tags=[])
         result = document_summary(doc)
         assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# Reciprocal Rank Fusion
+# ---------------------------------------------------------------------------
+class TestReciprocalRankFusion:
+    def test_basic_rrf(self):
+        """Documents appearing in both lists should rank highest."""
+        from app.pipeline.context_builder import _reciprocal_rank_fusion
+
+        vec_hits = [(1, 0.1), (2, 0.2), (3, 0.3)]
+        fts_hits = [(2, 5.0), (4, 3.0), (1, 1.0)]
+
+        fused = _reciprocal_rank_fusion(vec_hits, fts_hits, vector_weight=0.5)
+
+        # Doc 2 is rank 2 in vec, rank 1 in FTS — should be top
+        # Doc 1 is rank 1 in vec, rank 3 in FTS — should be second
+        ids = [doc_id for doc_id, _ in fused]
+        assert ids[0] == 2
+        assert ids[1] == 1
+        assert len(fused) == 4  # all unique docs
+
+    def test_empty_lists(self):
+        """Empty inputs should produce empty output."""
+        from app.pipeline.context_builder import _reciprocal_rank_fusion
+
+        assert _reciprocal_rank_fusion([], []) == []
+
+    def test_vector_only(self):
+        """When FTS is empty, only vector results appear."""
+        from app.pipeline.context_builder import _reciprocal_rank_fusion
+
+        vec_hits = [(1, 0.1), (2, 0.2)]
+        fused = _reciprocal_rank_fusion(vec_hits, [], vector_weight=0.7)
+        ids = [doc_id for doc_id, _ in fused]
+        assert 1 in ids
+        assert 2 in ids
+
+    def test_weight_bias(self):
+        """vector_weight=1.0 should fully favour vector ranking."""
+        from app.pipeline.context_builder import _reciprocal_rank_fusion
+
+        vec_hits = [(1, 0.1), (2, 0.2)]
+        fts_hits = [(2, 5.0), (1, 1.0)]
+
+        fused = _reciprocal_rank_fusion(vec_hits, fts_hits, vector_weight=1.0)
+        ids = [doc_id for doc_id, _ in fused]
+        # With weight=1.0, vector ranking dominates: doc 1 first
+        assert ids[0] == 1
+
+
+# ---------------------------------------------------------------------------
+# Distance threshold
+# ---------------------------------------------------------------------------
+class TestDistanceThreshold:
+    @pytest.mark.asyncio
+    async def test_max_distance_filters_results(self, mock_ollama: AsyncMock):
+        """Context docs beyond max_distance should be excluded."""
+        doc_a = _make_doc(10)
+        target = _make_doc(42, inbox=True)
+
+        paperless = AsyncMock()
+        paperless.get_document = AsyncMock(return_value=doc_a)
+
+        with (
+            patch("app.pipeline.context_builder._find_similar_ids") as mock_knn,
+            patch("app.pipeline.context_builder.settings") as mock_settings,
+        ):
+            mock_settings.context_max_docs = 5
+            mock_settings.context_max_distance = 0.3
+            mock_settings.embed_max_chars = 1000
+            # Return one doc within threshold, one beyond
+            mock_knn.return_value = [(10, 0.15)]
+
+            result = await find_similar_with_distances(target, paperless, mock_ollama, limit=5)
+
+        assert len(result) == 1
+        # Verify max_distance was passed
+        call_kwargs = mock_knn.call_args
+        assert call_kwargs.kwargs.get("max_distance") == 0.3
+
+
+# ---------------------------------------------------------------------------
+# Hybrid search integration
+# ---------------------------------------------------------------------------
+class TestHybridSearch:
+    @pytest.mark.asyncio
+    async def test_falls_back_to_vector_when_no_fts(self, mock_ollama: AsyncMock):
+        """When FTS returns no results, hybrid search uses pure vector."""
+        doc_a = _make_doc(10)
+        paperless = AsyncMock()
+        paperless.get_document = AsyncMock(return_value=doc_a)
+
+        with (
+            patch("app.pipeline.context_builder._find_similar_ids") as mock_vec,
+            patch("app.pipeline.context_builder._fts_search", return_value=[]),
+        ):
+            mock_vec.return_value = [(10, 0.15)]
+
+            from app.pipeline.context_builder import find_similar_by_query_text
+
+            result = await find_similar_by_query_text("test query", paperless, mock_ollama, limit=5)
+
+        assert len(result) == 1
+        assert result[0].document.id == 10

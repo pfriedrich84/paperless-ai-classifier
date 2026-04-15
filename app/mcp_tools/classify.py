@@ -113,24 +113,43 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(
         name="find_similar_documents",
         description=(
-            "Find documents similar to a given document using embedding-based "
-            "similarity search. Returns the most similar already-classified documents."
+            "Find documents similar to a given document using hybrid search "
+            "(embedding similarity + full-text). Returns the most similar "
+            "already-classified documents. Supports optional metadata filters."
         ),
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False),
     )
-    async def find_similar_documents(document_id: int, limit: int = 5, ctx: Context = None) -> str:
+    async def find_similar_documents(
+        document_id: int,
+        limit: int = 5,
+        correspondent_id: int | None = None,
+        document_type_id: int | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        ctx: Context = None,
+    ) -> str:
         check_api_key(ctx)
         deps = get_deps(ctx)
 
         from app.pipeline import context_builder
 
         doc = await deps.paperless.get_document(document_id)
-        similar = await context_builder.find_similar_documents(
-            doc, deps.paperless, deps.ollama, limit=limit
+        query_text = context_builder.document_summary(doc)
+
+        similar = await context_builder.find_similar_by_query_text_filtered(
+            query_text,
+            deps.paperless,
+            deps.ollama,
+            limit=limit,
+            correspondent_id=correspondent_id,
+            doctype_id=document_type_id,
+            date_from=date_from,
+            date_to=date_to,
         )
 
         results = []
-        for d in similar:
+        for sim in similar:
+            d = sim.document
             content_preview = (d.content or "")[:500]
             results.append(
                 {
@@ -141,6 +160,7 @@ def register(mcp: FastMCP) -> None:
                     "document_type": d.document_type,
                     "tags": d.tags,
                     "content_preview": content_preview,
+                    "distance": round(sim.distance, 4),
                 }
             )
 

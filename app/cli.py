@@ -83,7 +83,7 @@ async def cmd_reindex_embed() -> None:
     from app.db import EMBED_DIM, get_conn
     from app.indexer import initial_index
 
-    # Drop + recreate so dimension changes take effect
+    # Drop + recreate vec0 so dimension changes take effect, also clear FTS index
     with get_conn() as conn:
         conn.execute("DELETE FROM doc_embedding_meta")
         conn.execute("DROP TABLE IF EXISTS doc_embeddings")
@@ -93,7 +93,8 @@ async def cmd_reindex_embed() -> None:
                 embedding   FLOAT[{EMBED_DIM}]
             )"""
         )
-    print("Cleared existing embeddings.")
+        conn.execute("DELETE FROM doc_fts")
+    print("Cleared existing embeddings and FTS index.")
 
     paperless = PaperlessClient()
     ollama = OllamaClient()
