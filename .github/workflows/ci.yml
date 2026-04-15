@@ -95,8 +95,6 @@ jobs:
       - name: Grype container scan
         uses: anchore/scan-action@v6
         id: grype
-        env:
-          GRYPE_CONFIG: .grype.yaml
         with:
           image: test
           fail-build: true
@@ -108,8 +106,6 @@ jobs:
         uses: anchore/scan-action@v6
         if: always()
         id: grype-sarif
-        env:
-          GRYPE_CONFIG: .grype.yaml
         with:
           image: test
           fail-build: false

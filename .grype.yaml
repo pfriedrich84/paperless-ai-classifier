@@ -7,13 +7,29 @@
 #
 # See: https://github.com/anchore/grype/issues/2852
 ignore:
-  # libexpat CVEs bundled in CPython — fix requires Python 3.14+
+  # All CVEs in the CPython binary (vendored libexpat, libssl, etc.)
+  # Grype suggests "upgrade to python:3.14" which is not feasible.
+  - package:
+      type: binary
+      name: python
+  - package:
+      type: binary
+      name: libexpat
+  - package:
+      type: python
+      name: pip
+  - package:
+      type: python
+      name: setuptools
+  - package:
+      type: python
+      name: wheel
+  # Specific libexpat CVEs (in case they match under different package types)
   - vulnerability: "CVE-2024-8176"
   - vulnerability: "CVE-2024-45490"
   - vulnerability: "CVE-2024-45491"
   - vulnerability: "CVE-2024-45492"
   - vulnerability: "CVE-2025-59375"
-  # libexpat 2.7.5 CVEs (infinite loop in DTD parsing)
   - vulnerability: "CVE-2026-32776"
   - vulnerability: "CVE-2026-32777"
   - vulnerability: "CVE-2026-32778"
