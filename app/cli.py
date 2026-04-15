@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
+import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import structlog
 
@@ -46,6 +49,50 @@ def _configure_logging() -> None:
     )
 
 
+async def _ensure_meili(meili: MeiliClient) -> bool:
+    """Ensure Meilisearch is reachable, starting the sidecar process if needed.
+
+    Returns ``True`` when Meilisearch is ready, ``False`` otherwise.
+    """
+    if await meili.ping():
+        return True
+
+    # Binary not installed (e.g. local dev without Docker) → skip
+    binary = shutil.which("meilisearch")
+    if not binary:
+        return False
+
+    parsed = urlparse(settings.meilisearch_url)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or 7700
+
+    meili_db = Path(settings.data_dir) / "meili_data"
+    meili_db.mkdir(parents=True, exist_ok=True)
+
+    cmd: list[str] = [
+        binary,
+        "--db-path",
+        str(meili_db),
+        "--http-addr",
+        f"{host}:{port}",
+        "--no-analytics",
+    ]
+    if settings.meilisearch_api_key:
+        cmd += ["--master-key", settings.meilisearch_api_key]
+
+    print(f"Starting Meilisearch ({host}:{port}) ...")
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    for _ in range(10):
+        await asyncio.sleep(1)
+        if await meili.ping():
+            print("Meilisearch ready")
+            return True
+
+    print("Warning: Meilisearch did not become ready in 10 s")
+    return False
+
+
 async def cmd_reindex() -> None:
     """Full reindex: OCR correction (if enabled) + embedding."""
     from app.indexer import reindex_all
@@ -54,10 +101,10 @@ async def cmd_reindex() -> None:
     ollama = OllamaClient()
     meili = MeiliClient()
     try:
-        if await meili.ping():
+        if await _ensure_meili(meili):
             await meili.ensure_index(EMBED_DIM)
         else:
-            print("Warning: Meilisearch not reachable — continuing without hybrid search.")
+            print("Warning: Meilisearch not available — continuing without hybrid search.")
         count = await reindex_all(paperless, ollama, meili)
         print(f"Reindex complete: {count} documents indexed.")
     finally:
@@ -91,12 +138,11 @@ async def cmd_reindex_embed() -> None:
     from app.indexer import initial_index
 
     meili = MeiliClient()
-    meili_ok = await meili.ping()
-    if meili_ok:
+    if await _ensure_meili(meili):
         await meili.ensure_index(EMBED_DIM)
         await meili.delete_all_documents()
     else:
-        print("Warning: Meilisearch not reachable — continuing without hybrid search.")
+        print("Warning: Meilisearch not available — continuing without hybrid search.")
 
     # Clear existing embeddings
     with get_conn() as conn:
@@ -131,10 +177,10 @@ async def cmd_poll() -> None:
     worker._meili = meili
 
     try:
-        if await meili.ping():
+        if await _ensure_meili(meili):
             await meili.ensure_index(EMBED_DIM)
         else:
-            print("Warning: Meilisearch not reachable — continuing without hybrid search.")
+            print("Warning: Meilisearch not available — continuing without hybrid search.")
         await poll_inbox()
         print("Inbox processing complete.")
     finally:
