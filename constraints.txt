@@ -2,8 +2,9 @@
 # that are at least 14 days old. Update only after the new version
 # has been publicly available for >= 14 days.
 #
-# Last reviewed: 2026-04-12
+# Last reviewed: 2026-04-15
 
+packaging<=26.0
 rich<=14.3.3
 click<=8.3.1
 # cryptography 46.0.7 is a security fix for CVE-2026-39892 (allowed as age exception)

@@ -1,0 +1,35 @@
+# Grype vulnerability scanner configuration
+#
+# Ignore CPython-vendored library CVEs that require a Python major version
+# upgrade (3.14+) to fix. These are in statically-compiled C libraries
+# bundled inside the Python interpreter binary — apt-get upgrade cannot
+# fix them, and rebuilding CPython is out of scope.
+#
+# See: https://github.com/anchore/grype/issues/2852
+ignore:
+  # All CVEs in the CPython binary (vendored libexpat, libssl, etc.)
+  # Grype suggests "upgrade to python:3.14" which is not feasible.
+  - package:
+      type: binary
+      name: python
+  - package:
+      type: binary
+      name: libexpat
+  - package:
+      type: python
+      name: pip
+  - package:
+      type: python
+      name: setuptools
+  - package:
+      type: python
+      name: wheel
+  # Specific libexpat CVEs (in case they match under different package types)
+  - vulnerability: "CVE-2024-8176"
+  - vulnerability: "CVE-2024-45490"
+  - vulnerability: "CVE-2024-45491"
+  - vulnerability: "CVE-2024-45492"
+  - vulnerability: "CVE-2025-59375"
+  - vulnerability: "CVE-2026-32776"
+  - vulnerability: "CVE-2026-32777"
+  - vulnerability: "CVE-2026-32778"

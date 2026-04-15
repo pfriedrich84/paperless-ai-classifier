@@ -1,5 +1,5 @@
 # Stage 1: Grab the Meilisearch binary from the official image
-FROM getmeili/meilisearch:v1.13 AS meilisearch
+FROM getmeili/meilisearch:v1.42.1 AS meilisearch
 
 # Stage 2: Application
 FROM python:3.12-slim AS base
@@ -14,9 +14,11 @@ WORKDIR /app
 # System deps (sqlite-vec wheel ist prebuilt, wir brauchen nur tini für saubere Signale)
 RUN apt-get update \
     && apt-get upgrade -y \
+    && apt-get dist-upgrade -y \
     && apt-get install -y --no-install-recommends \
         tini \
         curl \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Meilisearch binary (hybrid search sidecar)
