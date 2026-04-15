@@ -83,7 +83,6 @@ def _setup_app(tmp_path, monkeypatch):
 
     app.state.paperless = mock_paperless
     app.state.ollama = mock_ollama
-    app.state.meili = AsyncMock()
     app.state.templates = templates
 
 

@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 
 import structlog
 
-from app.clients.meilisearch import MeiliClient
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.config import settings
@@ -72,7 +71,6 @@ def cancel_reindex() -> bool:
 async def initial_index(
     paperless: PaperlessClient,
     ollama: OllamaClient,
-    meili: MeiliClient,
     limit: int | None = None,
 ) -> int:
     """Embed all already-classified documents that are not yet indexed.
@@ -106,7 +104,7 @@ async def initial_index(
             cached = get_cached_ocr(doc.id)
             if cached:
                 doc = doc.model_copy(update={"content": cached})
-            await index_document(doc, ollama, meili)
+            await index_document(doc, ollama)
             count += 1
         except Exception as exc:
             _reindex_progress.failed += 1
@@ -143,7 +141,6 @@ async def initial_index(
 async def reindex_all(
     paperless: PaperlessClient,
     ollama: OllamaClient,
-    meili: MeiliClient,
 ) -> int:
     """Drop all embeddings and rebuild from scratch.
 
@@ -151,10 +148,6 @@ async def reindex_all(
     """
     try:
         log.info("starting full reindex — clearing existing embeddings")
-        try:
-            await meili.delete_all_documents()
-        except Exception as exc:
-            log.warning("meilisearch clear failed — continuing without", error=str(exc))
         with get_conn() as conn:
             conn.execute("DELETE FROM doc_embedding_meta")
             conn.execute("DELETE FROM doc_embeddings")
@@ -188,7 +181,7 @@ async def reindex_all(
                 await ollama.unload_model(vision_model)
 
         # --- Phase 1: Embedding (uses cached OCR text if available) ---
-        result = await initial_index(paperless, ollama, meili)
+        result = await initial_index(paperless, ollama)
         _reindex_progress.finished_at = datetime.now(tz=UTC).isoformat()
         return result
     except Exception as exc:
@@ -201,7 +194,6 @@ async def reindex_all(
 def start_reindex_task(
     paperless: PaperlessClient,
     ollama: OllamaClient,
-    meili: MeiliClient,
 ) -> bool:
     """Launch ``reindex_all`` as a background asyncio task.
 
@@ -223,7 +215,7 @@ def start_reindex_task(
 
     async def _run() -> None:
         try:
-            await reindex_all(paperless, ollama, meili)
+            await reindex_all(paperless, ollama)
         except Exception as exc:
             log.error("background reindex failed", error=str(exc))
 

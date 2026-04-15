@@ -174,7 +174,6 @@ async def webhook_new(
 
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
-    meili = request.app.state.meili
 
     log.info("webhook/new triggered", document_id=doc_id, webhook_event=body.get("event"))
 
@@ -189,7 +188,6 @@ async def webhook_new(
             doc,
             paperless,
             ollama,
-            meili,
             correspondents,
             doctypes,
             storage_paths,
@@ -244,7 +242,6 @@ async def webhook_edit(
 
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
-    meili = request.app.state.meili
 
     log.info("webhook/edit triggered", document_id=doc_id, webhook_event=body.get("event"))
 
@@ -265,7 +262,7 @@ async def webhook_edit(
             return {"status": "ok", "document_id": doc_id, "action": "skipped_empty"}
 
         vec = await ollama.embed(summary)
-        await context_builder.store_embedding(doc, vec, meili)
+        context_builder.store_embedding(doc, vec)
 
         log.info("document re-embedded", document_id=doc_id)
         return {"status": "ok", "document_id": doc_id, "action": "reembedded"}

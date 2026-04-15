@@ -36,9 +36,8 @@ async def chat_send(
     session_id, session = get_or_create_session(chat_session)
     paperless = request.app.state.paperless
     ollama = request.app.state.ollama
-    meili = request.app.state.meili
 
-    result = await ask(question, session, paperless, ollama, meili)
+    result = await ask(question, session, paperless, ollama)
 
     tmpl = request.app.state.templates.get_template("partials/chat_messages.html")
     html = tmpl.render(messages=session.messages, sources=result.sources)

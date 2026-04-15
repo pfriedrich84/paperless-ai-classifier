@@ -1,4 +1,4 @@
-"""Tests for the context builder: inbox filtering and overfetch compensation."""
+"""Tests for the context builder: inbox filtering and similarity search via sqlite-vec."""
 
 from __future__ import annotations
 
@@ -39,34 +39,11 @@ def _make_doc(doc_id: int, *, inbox: bool = False, **kwargs) -> PaperlessDocumen
 
 
 # ---------------------------------------------------------------------------
-# Inbox filter tests
+# Inbox filter tests (now sqlite-vec based)
 # ---------------------------------------------------------------------------
 class TestInboxFilter:
     @pytest.mark.asyncio
-    async def test_inbox_filter_in_search_expression(
-        self, mock_ollama: AsyncMock, mock_meili: AsyncMock
-    ):
-        """Meilisearch filter expression should exclude inbox-tagged documents."""
-        classified_doc = _make_doc(10, correspondent=2, document_type=10)
-        target = _make_doc(42, inbox=True)
-
-        paperless = AsyncMock()
-        paperless.get_document = AsyncMock(return_value=classified_doc)
-
-        from app.clients.meilisearch import MeiliHit
-
-        # Meilisearch returns only non-inbox docs (filter applied server-side)
-        mock_meili.vector_search = AsyncMock(return_value=[MeiliHit(doc_id=10, score=0.9)])
-        await find_similar_documents(target, paperless, mock_ollama, mock_meili, limit=5)
-
-        # Verify filter expression contains inbox tag ID
-        call_kwargs = mock_meili.vector_search.call_args
-        filter_expr = call_kwargs.kwargs.get("filter_expr", "")
-        assert str(INBOX_TAG_ID) in filter_expr
-        assert "NOT IN" in filter_expr
-
-    @pytest.mark.asyncio
-    async def test_non_inbox_docs_included(self, mock_ollama: AsyncMock, mock_meili: AsyncMock):
+    async def test_non_inbox_docs_included(self, mock_ollama: AsyncMock):
         """Documents without the inbox tag should be included as context."""
         doc_a = _make_doc(10, extra_tags=[20])
         doc_b = _make_doc(11, extra_tags=[21])
@@ -77,26 +54,21 @@ class TestInboxFilter:
             side_effect=lambda doc_id: {10: doc_a, 11: doc_b}[doc_id]
         )
 
-        from app.clients.meilisearch import MeiliHit
-
-        mock_meili.vector_search = AsyncMock(
-            return_value=[MeiliHit(doc_id=10, score=0.9), MeiliHit(doc_id=11, score=0.8)]
-        )
-        result = await find_similar_documents(target, paperless, mock_ollama, mock_meili, limit=5)
+        with patch("app.pipeline.context_builder._find_similar_ids") as mock_knn:
+            mock_knn.return_value = [(10, 0.1), (11, 0.2)]
+            result = await find_similar_documents(target, paperless, mock_ollama, limit=5)
 
         assert len(result) == 2
         assert [d.id for d in result] == [10, 11]
 
     @pytest.mark.asyncio
-    async def test_all_inbox_returns_empty(self, mock_ollama: AsyncMock, mock_meili: AsyncMock):
-        """If all candidates are in the inbox, return empty list."""
+    async def test_empty_results(self, mock_ollama: AsyncMock):
+        """If KNN returns no results, return empty list."""
         target = _make_doc(42, inbox=True)
-
         paperless = AsyncMock()
 
-        # Meilisearch filter excludes inbox docs, so vector_search returns empty
-        mock_meili.vector_search = AsyncMock(return_value=[])
-        result = await find_similar_documents(target, paperless, mock_ollama, mock_meili, limit=5)
+        with patch("app.pipeline.context_builder._find_similar_ids", return_value=[]):
+            result = await find_similar_documents(target, paperless, mock_ollama, limit=5)
 
         assert result == []
 
@@ -106,10 +78,8 @@ class TestInboxFilter:
 # ---------------------------------------------------------------------------
 class TestOverfetchCompensation:
     @pytest.mark.asyncio
-    async def test_limit_respected_despite_filtering(
-        self, mock_ollama: AsyncMock, mock_meili: AsyncMock
-    ):
-        """Even when some candidates are filtered, the result should not exceed limit."""
+    async def test_limit_respected(self, mock_ollama: AsyncMock):
+        """Results should not exceed the requested limit."""
         docs = {
             1: _make_doc(1),
             3: _make_doc(3),
@@ -120,26 +90,15 @@ class TestOverfetchCompensation:
         paperless = AsyncMock()
         paperless.get_document = AsyncMock(side_effect=lambda doc_id: docs[doc_id])
 
-        from app.clients.meilisearch import MeiliHit
-
-        # Meilisearch returns only non-inbox docs (filter applied server-side)
-        mock_meili.vector_search = AsyncMock(
-            return_value=[
-                MeiliHit(doc_id=1, score=0.9),
-                MeiliHit(doc_id=3, score=0.8),
-                MeiliHit(doc_id=5, score=0.7),
-            ]
-        )
-        result = await find_similar_documents(target, paperless, mock_ollama, mock_meili, limit=3)
+        with patch("app.pipeline.context_builder._find_similar_ids") as mock_knn:
+            mock_knn.return_value = [(1, 0.1), (3, 0.2), (5, 0.3)]
+            result = await find_similar_documents(target, paperless, mock_ollama, limit=3)
 
         assert len(result) == 3
-        assert all(INBOX_TAG_ID not in d.tags for d in result)
 
     @pytest.mark.asyncio
-    async def test_fewer_than_limit_when_not_enough_candidates(
-        self, mock_ollama: AsyncMock, mock_meili: AsyncMock
-    ):
-        """If there aren't enough non-inbox candidates, return what we have."""
+    async def test_fewer_than_limit_when_not_enough_candidates(self, mock_ollama: AsyncMock):
+        """If there aren't enough candidates, return what we have."""
         docs = {
             1: _make_doc(1),
         }
@@ -148,10 +107,9 @@ class TestOverfetchCompensation:
         paperless = AsyncMock()
         paperless.get_document = AsyncMock(side_effect=lambda doc_id: docs[doc_id])
 
-        from app.clients.meilisearch import MeiliHit
-
-        mock_meili.vector_search = AsyncMock(return_value=[MeiliHit(doc_id=1, score=0.9)])
-        result = await find_similar_documents(target, paperless, mock_ollama, mock_meili, limit=5)
+        with patch("app.pipeline.context_builder._find_similar_ids") as mock_knn:
+            mock_knn.return_value = [(1, 0.1)]
+            result = await find_similar_documents(target, paperless, mock_ollama, limit=5)
 
         assert len(result) == 1
         assert result[0].id == 1
@@ -220,13 +178,11 @@ class TestFullPromptWithContext:
         assert "Speicherpfad:" not in target_section
 
     @pytest.mark.asyncio
-    async def test_empty_content_doc_skipped_by_find_similar(
-        self, mock_ollama: AsyncMock, mock_meili: AsyncMock
-    ):
+    async def test_empty_content_doc_skipped_by_find_similar(self, mock_ollama: AsyncMock):
         """A target doc with empty content should return no context."""
         target = PaperlessDocument(id=1, title="", content="")
         paperless = AsyncMock()
-        result = await find_similar_documents(target, paperless, mock_ollama, mock_meili, limit=5)
+        result = await find_similar_documents(target, paperless, mock_ollama, limit=5)
         assert result == []
         mock_ollama.embed.assert_not_called()
 
@@ -236,7 +192,7 @@ class TestFullPromptWithContext:
 # ---------------------------------------------------------------------------
 class TestFindSimilarWithDistances:
     @pytest.mark.asyncio
-    async def test_returns_distance_scores(self, mock_ollama: AsyncMock, mock_meili: AsyncMock):
+    async def test_returns_distance_scores(self, mock_ollama: AsyncMock):
         """Results should include distance scores from the vector search."""
         doc_a = _make_doc(10)
         doc_b = _make_doc(20)
@@ -247,47 +203,35 @@ class TestFindSimilarWithDistances:
             side_effect=lambda doc_id: {10: doc_a, 20: doc_b}[doc_id]
         )
 
-        from app.clients.meilisearch import MeiliHit
-
-        mock_meili.vector_search = AsyncMock(
-            return_value=[MeiliHit(doc_id=10, score=0.85), MeiliHit(doc_id=20, score=0.58)]
-        )
-        results = await find_similar_with_distances(
-            target, paperless, mock_ollama, mock_meili, limit=5
-        )
+        with patch("app.pipeline.context_builder._find_similar_ids") as mock_knn:
+            mock_knn.return_value = [(10, 0.15), (20, 0.42)]
+            results = await find_similar_with_distances(target, paperless, mock_ollama, limit=5)
 
         assert len(results) == 2
         assert results[0].document.id == 10
         assert results[1].document.id == 20
 
     @pytest.mark.asyncio
-    async def test_inbox_filter_expression_with_distances(
-        self, mock_ollama: AsyncMock, mock_meili: AsyncMock
-    ):
-        """Meilisearch filter should exclude inbox docs; only classified docs returned."""
+    async def test_excludes_source_doc(self, mock_ollama: AsyncMock):
+        """KNN search should exclude the source document."""
         classified = _make_doc(10)
         target = _make_doc(42, inbox=True)
 
         paperless = AsyncMock()
         paperless.get_document = AsyncMock(return_value=classified)
 
-        from app.clients.meilisearch import MeiliHit
-
-        mock_meili.vector_search = AsyncMock(return_value=[MeiliHit(doc_id=10, score=0.8)])
-        results = await find_similar_with_distances(
-            target, paperless, mock_ollama, mock_meili, limit=5
-        )
+        with patch("app.pipeline.context_builder._find_similar_ids") as mock_knn:
+            mock_knn.return_value = [(10, 0.2)]
+            results = await find_similar_with_distances(target, paperless, mock_ollama, limit=5)
 
         assert len(results) == 1
         assert results[0].document.id == 10
-        call_kwargs = mock_meili.vector_search.call_args
-        filter_expr = call_kwargs.kwargs.get("filter_expr", "")
-        assert str(INBOX_TAG_ID) in filter_expr
+        # Verify exclude_id was passed
+        call_kwargs = mock_knn.call_args
+        assert call_kwargs.kwargs.get("exclude_id") == 42
 
     @pytest.mark.asyncio
-    async def test_delegates_to_find_similar_documents(
-        self, mock_ollama: AsyncMock, mock_meili: AsyncMock
-    ):
+    async def test_delegates_to_find_similar_documents(self, mock_ollama: AsyncMock):
         """find_similar_documents should return the same docs (without distances)."""
         doc_a = _make_doc(10)
         target = _make_doc(42, inbox=True)
@@ -295,10 +239,9 @@ class TestFindSimilarWithDistances:
         paperless = AsyncMock()
         paperless.get_document = AsyncMock(return_value=doc_a)
 
-        from app.clients.meilisearch import MeiliHit
-
-        mock_meili.vector_search = AsyncMock(return_value=[MeiliHit(doc_id=10, score=0.75)])
-        result = await find_similar_documents(target, paperless, mock_ollama, mock_meili, limit=5)
+        with patch("app.pipeline.context_builder._find_similar_ids") as mock_knn:
+            mock_knn.return_value = [(10, 0.25)]
+            result = await find_similar_documents(target, paperless, mock_ollama, limit=5)
 
         assert len(result) == 1
         assert result[0].id == 10
@@ -307,53 +250,58 @@ class TestFindSimilarWithDistances:
 
 
 # ---------------------------------------------------------------------------
-# find_similar_by_id
+# find_similar_by_id (synchronous, sqlite-vec based)
 # ---------------------------------------------------------------------------
 class TestFindSimilarById:
-    @pytest.mark.asyncio
-    async def test_returns_empty_for_unknown_doc(self, mock_meili: AsyncMock):
+    def test_returns_empty_for_unknown_doc(self):
         """If the document has no embedding, return empty list."""
-        mock_meili.get_document_vector = AsyncMock(return_value=None)
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_conn.execute.return_value.fetchone.return_value = None
 
-        result = await find_similar_by_id(999, mock_meili, limit=5)
+        with patch("app.pipeline.context_builder.get_conn", return_value=mock_conn):
+            result = find_similar_by_id(999, limit=5)
 
         assert result == []
 
-    @pytest.mark.asyncio
-    async def test_returns_id_distance_pairs(self, mock_meili: AsyncMock):
+    def test_returns_id_distance_pairs(self):
         """Should return (doc_id, distance) tuples excluding source doc."""
-        from app.clients.meilisearch import MeiliHit
+        import struct
 
-        mock_meili.get_document_vector = AsyncMock(return_value=[0.1] * 768)
-        mock_meili.vector_search = AsyncMock(
-            return_value=[
-                MeiliHit(doc_id=10, score=0.85),
-                MeiliHit(doc_id=20, score=0.68),
-            ]
-        )
+        fake_embedding = struct.pack("768f", *([0.1] * 768))
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
 
-        result = await find_similar_by_id(42, mock_meili, limit=5)
+        # First call: get stored embedding
+        fetch_row = {"embedding": fake_embedding}
+        # Second call: KNN search
+        knn_rows = [
+            {"document_id": 10, "distance": 0.15},
+            {"document_id": 20, "distance": 0.32},
+        ]
+
+        call_count = 0
+
+        def mock_execute(sql, params=None):
+            nonlocal call_count
+            call_count += 1
+            result = MagicMock()
+            if call_count == 1:
+                result.fetchone.return_value = fetch_row
+            else:
+                result.fetchall.return_value = knn_rows
+            return result
+
+        mock_conn.execute = mock_execute
+
+        with patch("app.pipeline.context_builder.get_conn", return_value=mock_conn):
+            result = find_similar_by_id(42, limit=5)
 
         assert len(result) == 2
         assert result[0][0] == 10
         assert result[1][0] == 20
-
-    @pytest.mark.asyncio
-    async def test_respects_limit(self, mock_meili: AsyncMock):
-        """Should not return more than `limit` results."""
-        from app.clients.meilisearch import MeiliHit
-
-        mock_meili.get_document_vector = AsyncMock(return_value=[0.1] * 768)
-        mock_meili.vector_search = AsyncMock(
-            return_value=[
-                MeiliHit(doc_id=10, score=0.9),
-                MeiliHit(doc_id=20, score=0.8),
-            ]
-        )
-
-        result = await find_similar_by_id(42, mock_meili, limit=2)
-
-        assert len(result) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +309,7 @@ class TestFindSimilarById:
 # ---------------------------------------------------------------------------
 class TestFindSimilarWithPrecomputedEmbedding:
     @pytest.mark.asyncio
-    async def test_uses_precomputed_embedding(self, mock_meili: AsyncMock):
+    async def test_uses_precomputed_embedding(self):
         """Should use the provided embedding without calling ollama.embed()."""
         doc_a = _make_doc(10)
         target = _make_doc(42, inbox=True)
@@ -370,23 +318,21 @@ class TestFindSimilarWithPrecomputedEmbedding:
         paperless = AsyncMock()
         paperless.get_document = AsyncMock(return_value=doc_a)
 
-        from app.clients.meilisearch import MeiliHit
+        with patch("app.pipeline.context_builder._find_similar_ids") as mock_knn:
+            mock_knn.return_value = [(10, 0.25)]
 
-        mock_meili.vector_search = AsyncMock(return_value=[MeiliHit(doc_id=10, score=0.75)])
-
-        results = await find_similar_with_precomputed_embedding(
-            target, embedding, paperless, mock_meili, limit=5
-        )
+            results = await find_similar_with_precomputed_embedding(
+                target, embedding, paperless, limit=5
+            )
 
         assert len(results) == 1
         assert results[0].document.id == 10
-        # distance = 1.0 - score
         assert results[0].distance == pytest.approx(0.25)
-        mock_meili.vector_search.assert_called_once()
+        mock_knn.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_excludes_self_and_inbox_via_filter(self, mock_meili: AsyncMock):
-        """Filter expression should exclude source doc and inbox-tagged docs."""
+    async def test_excludes_self(self):
+        """exclude_id should be passed to the KNN search."""
         doc_a = _make_doc(10)
         target = _make_doc(42, inbox=True)
         embedding = [0.1] * 768
@@ -394,32 +340,26 @@ class TestFindSimilarWithPrecomputedEmbedding:
         paperless = AsyncMock()
         paperless.get_document = AsyncMock(return_value=doc_a)
 
-        from app.clients.meilisearch import MeiliHit
+        with patch("app.pipeline.context_builder._find_similar_ids") as mock_knn:
+            mock_knn.return_value = [(10, 0.2)]
 
-        mock_meili.vector_search = AsyncMock(return_value=[MeiliHit(doc_id=10, score=0.8)])
+            await find_similar_with_precomputed_embedding(target, embedding, paperless, limit=5)
 
-        await find_similar_with_precomputed_embedding(
-            target, embedding, paperless, mock_meili, limit=5
-        )
-
-        # Verify the filter expression excludes inbox tag and source doc
-        call_kwargs = mock_meili.vector_search.call_args
-        filter_expr = call_kwargs.kwargs.get("filter_expr", "")
-        assert str(INBOX_TAG_ID) in filter_expr
-        assert str(target.id) in filter_expr
+        call_kwargs = mock_knn.call_args
+        assert call_kwargs.kwargs.get("exclude_id") == 42
 
     @pytest.mark.asyncio
-    async def test_empty_results(self, mock_meili: AsyncMock):
-        """Should return empty list when Meilisearch returns no hits."""
+    async def test_empty_results(self):
+        """Should return empty list when KNN returns no hits."""
         target = _make_doc(42, inbox=True)
         embedding = [0.1] * 768
 
         paperless = AsyncMock()
-        mock_meili.vector_search = AsyncMock(return_value=[])
 
-        results = await find_similar_with_precomputed_embedding(
-            target, embedding, paperless, mock_meili, limit=5
-        )
+        with patch("app.pipeline.context_builder._find_similar_ids", return_value=[]):
+            results = await find_similar_with_precomputed_embedding(
+                target, embedding, paperless, limit=5
+            )
 
         assert results == []
 
@@ -428,9 +368,8 @@ class TestFindSimilarWithPrecomputedEmbedding:
 # store_embedding
 # ---------------------------------------------------------------------------
 class TestStoreEmbedding:
-    @pytest.mark.asyncio
-    async def test_writes_to_meili_and_meta(self, mock_meili: AsyncMock):
-        """store_embedding should write to Meilisearch and doc_embedding_meta."""
+    def test_writes_to_sqlite_and_meta(self):
+        """store_embedding should write to doc_embeddings and doc_embedding_meta."""
         doc = PaperlessDocument(
             id=42,
             title="Test Doc",
@@ -449,16 +388,13 @@ class TestStoreEmbedding:
             "app.pipeline.context_builder.get_conn",
             MagicMock(return_value=mock_conn),
         ):
-            await store_embedding(doc, embedding, mock_meili)
+            store_embedding(doc, embedding)
 
-        # Meilisearch upsert called with correct doc_id
-        mock_meili.upsert_document.assert_called_once()
-        call_kwargs = mock_meili.upsert_document.call_args
-        assert call_kwargs.kwargs.get("doc_id") == 42 or call_kwargs[1].get("doc_id") == 42
-
-        # doc_embedding_meta INSERT executed
-        assert mock_conn.execute.call_count == 1
-        meta_sql = mock_conn.execute.call_args_list[0][0][0]
+        # Two SQL executions: doc_embeddings + doc_embedding_meta
+        assert mock_conn.execute.call_count == 2
+        embed_sql = mock_conn.execute.call_args_list[0][0][0]
+        assert "doc_embeddings" in embed_sql
+        meta_sql = mock_conn.execute.call_args_list[1][0][0]
         assert "doc_embedding_meta" in meta_sql
 
 
