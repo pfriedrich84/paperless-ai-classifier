@@ -108,13 +108,25 @@ CREATE VIRTUAL TABLE IF NOT EXISTS doc_embeddings USING vec0(
     embedding   FLOAT[{EMBED_DIM}]
 );
 
--- Metadata table shadowing doc_embeddings for human-readable lookups
+-- Metadata table shadowing doc_embeddings for human-readable lookups + filtering
 CREATE TABLE IF NOT EXISTS doc_embedding_meta (
     document_id  INTEGER PRIMARY KEY,
     title        TEXT,
     correspondent INTEGER,
     doctype       INTEGER,
+    storage_path  INTEGER,
+    created_date  TEXT,
     indexed_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- =========================================================================
+-- Full-text search index (FTS5) for hybrid search (vector + keyword)
+-- =========================================================================
+CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(
+    title,
+    content,
+    document_id UNINDEXED,
+    tokenize='unicode61'
 );
 
 -- =========================================================================
@@ -160,6 +172,16 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
         "suggestions",
         "context_docs_json",
         "ALTER TABLE suggestions ADD COLUMN context_docs_json TEXT",
+    ),
+    (
+        "doc_embedding_meta",
+        "storage_path",
+        "ALTER TABLE doc_embedding_meta ADD COLUMN storage_path INTEGER",
+    ),
+    (
+        "doc_embedding_meta",
+        "created_date",
+        "ALTER TABLE doc_embedding_meta ADD COLUMN created_date TEXT",
     ),
 ]
 

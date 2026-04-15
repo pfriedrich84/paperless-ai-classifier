@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     # --- Worker ---
     poll_interval_seconds: int = 300
     context_max_docs: int = 5
+    context_max_distance: float = 0.0  # 0 = no threshold; e.g. 1.5 filters irrelevant docs
+    hybrid_search_weight: float = 0.7  # 0.0 = FTS only, 1.0 = vector only, 0.7 = default blend
     max_doc_chars: int = 32000
     embed_max_chars: int = 1000
     auto_commit_confidence: int = 0  # 0 = immer manuell reviewen
@@ -323,6 +325,18 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Context Max Docs",
         "number",
         help="Max similar documents used as few-shot context",
+    ),
+    "context_max_distance": _fm(
+        "Phase 3: Klassifikation",
+        "Context Max Distance",
+        "number",
+        help="Max L2 distance for context docs (0 = no threshold). Lower values = stricter relevance filtering.",
+    ),
+    "hybrid_search_weight": _fm(
+        "Phase 2: Embedding",
+        "Hybrid Search Weight",
+        "number",
+        help="Blend ratio for hybrid search: 0.0 = keyword only, 1.0 = vector only, 0.7 = default",
     ),
     "auto_commit_confidence": _fm(
         "Phase 3: Klassifikation",

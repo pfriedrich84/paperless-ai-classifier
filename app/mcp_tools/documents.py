@@ -57,6 +57,51 @@ def register(mcp: FastMCP) -> None:
         return json.dumps([_doc_summary(d) for d in docs], ensure_ascii=False, default=str)
 
     @mcp.tool(
+        name="search_documents_hybrid",
+        description=(
+            "Semantic + keyword hybrid search across indexed documents. "
+            "Combines embedding similarity (vector search) with full-text "
+            "matching (FTS5) using Reciprocal Rank Fusion for better results "
+            "than either method alone. Supports optional metadata filters."
+        ),
+        annotations=_RO,
+    )
+    async def search_documents_hybrid(
+        query: str,
+        limit: int = 10,
+        correspondent_id: int | None = None,
+        document_type_id: int | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        ctx: Context = None,
+    ) -> str:
+        check_api_key(ctx)
+        deps = get_deps(ctx)
+
+        from app.pipeline.context_builder import find_similar_by_query_text_filtered
+
+        results = await find_similar_by_query_text_filtered(
+            query,
+            deps.paperless,
+            deps.ollama,
+            limit=limit,
+            correspondent_id=correspondent_id,
+            doctype_id=document_type_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+        docs = []
+        for sim in results:
+            d = sim.document
+            summary = _doc_summary(d)
+            summary["distance"] = round(sim.distance, 4)
+            summary["content_preview"] = (d.content or "")[:500]
+            docs.append(summary)
+
+        return json.dumps(docs, ensure_ascii=False, default=str)
+
+    @mcp.tool(
         name="get_document",
         description=(
             "Get full details of a single document including its text content. "

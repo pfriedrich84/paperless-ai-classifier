@@ -83,11 +83,12 @@ async def cmd_reindex_embed() -> None:
     from app.db import get_conn
     from app.indexer import initial_index
 
-    # Clear existing embeddings
+    # Clear existing embeddings and FTS index
     with get_conn() as conn:
         conn.execute("DELETE FROM doc_embedding_meta")
         conn.execute("DELETE FROM doc_embeddings")
-    print("Cleared existing embeddings.")
+        conn.execute("DELETE FROM doc_fts")
+    print("Cleared existing embeddings and FTS index.")
 
     paperless = PaperlessClient()
     ollama = OllamaClient()
