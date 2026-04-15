@@ -141,6 +141,7 @@ def register(mcp: FastMCP) -> None:
             deps.paperless,
             deps.ollama,
             limit=limit,
+            exclude_id=document_id,
             correspondent_id=correspondent_id,
             doctype_id=document_type_id,
             date_from=date_from,

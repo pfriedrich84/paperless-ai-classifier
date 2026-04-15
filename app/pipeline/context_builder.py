@@ -280,25 +280,31 @@ def _hybrid_search(
     # Over-fetch to compensate for exclusion / distance / metadata filtering
     fetch_limit = limit * 4
 
-    # Vector leg
-    vec_hits = _find_similar_ids(
-        embedding,
-        exclude_id=exclude_id,
-        limit=fetch_limit,
-        max_distance=max_distance,
-    )
-
-    # FTS leg
-    fts_hits = _fts_search(query_text, limit=fetch_limit)
-    if exclude_id is not None:
-        fts_hits = [(did, s) for did, s in fts_hits if did != exclude_id]
-
-    if not fts_hits:
-        # No FTS results (empty index or no match) — pure vector search
-        hits = vec_hits[:limit]
+    # Short-circuit at weight endpoints to avoid RRF leaking cross-leg results
+    if vector_weight >= 1.0:
+        hits = _find_similar_ids(
+            embedding, exclude_id=exclude_id, limit=fetch_limit, max_distance=max_distance
+        )
+    elif vector_weight <= 0.0:
+        fts_hits = _fts_search(query_text, limit=fetch_limit)
+        if exclude_id is not None:
+            fts_hits = [(did, s) for did, s in fts_hits if did != exclude_id]
+        hits = fts_hits
     else:
-        fused = _reciprocal_rank_fusion(vec_hits, fts_hits, vector_weight=vector_weight)
-        hits = fused
+        # Vector leg
+        vec_hits = _find_similar_ids(
+            embedding, exclude_id=exclude_id, limit=fetch_limit, max_distance=max_distance
+        )
+
+        # FTS leg
+        fts_hits = _fts_search(query_text, limit=fetch_limit)
+        if exclude_id is not None:
+            fts_hits = [(did, s) for did, s in fts_hits if did != exclude_id]
+
+        if not fts_hits:
+            hits = vec_hits
+        else:
+            hits = _reciprocal_rank_fusion(vec_hits, fts_hits, vector_weight=vector_weight)
 
     # Apply metadata filters
     hits = _apply_metadata_filter(
@@ -389,6 +395,7 @@ async def find_similar_by_query_text_filtered(
     ollama: OllamaClient,
     limit: int | None = None,
     *,
+    exclude_id: int | None = None,
     correspondent_id: int | None = None,
     doctype_id: int | None = None,
     date_from: str | None = None,
@@ -397,7 +404,8 @@ async def find_similar_by_query_text_filtered(
     """Like :func:`find_similar_by_query_text` but with metadata filters.
 
     Used by MCP tools and chat to constrain search results by correspondent,
-    document type, or date range.
+    document type, or date range.  Pass *exclude_id* to prevent a document
+    from appearing in its own results.
     """
     if not query_text.strip():
         return []
@@ -412,6 +420,7 @@ async def find_similar_by_query_text_filtered(
     hits = _hybrid_search(
         vec,
         query_text,
+        exclude_id=exclude_id,
         limit=limit,
         max_distance=settings.context_max_distance,
         vector_weight=settings.hybrid_search_weight,
