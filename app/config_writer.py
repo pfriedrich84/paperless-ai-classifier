@@ -173,12 +173,17 @@ async def apply_runtime_changes(app: Any, changed: dict[str, Any]) -> list[str]:
     # --- Scheduler ---
     if "poll_interval_seconds" in changed_keys:
         scheduler = getattr(app.state, "scheduler", None)
-        if scheduler:
+        if settings.poll_interval_seconds <= 0:
+            if scheduler:
+                scheduler.pause_job("poll_inbox")
+                actions.append("Automatic polling disabled")
+        elif scheduler:
             scheduler.reschedule_job(
                 "poll_inbox",
                 trigger="interval",
                 seconds=settings.poll_interval_seconds,
             )
+            scheduler.resume_job("poll_inbox")
             actions.append(f"Poll interval changed to {settings.poll_interval_seconds}s")
 
     return actions

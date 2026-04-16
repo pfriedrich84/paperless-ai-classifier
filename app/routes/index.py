@@ -121,7 +121,10 @@ def _render_pipeline_status(poll, last_poll: dict | None, next_run: str | None) 
 
     if not next_info:
         interval = settings.poll_interval_seconds
-        next_info = f'<span class="text-sm text-gray-400">Interval: every {interval}s</span>'
+        if interval <= 0:
+            next_info = '<span class="text-sm text-gray-400">Automatic polling disabled</span>'
+        else:
+            next_info = f'<span class="text-sm text-gray-400">Interval: every {interval}s</span>'
 
     return (
         f'<div id="pipeline-status" hx-get="/pipeline-status"'

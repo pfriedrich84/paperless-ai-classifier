@@ -832,6 +832,10 @@ def start_scheduler(app: object) -> None:
     _paperless = getattr(app, "state", app).paperless  # type: ignore[union-attr]
     _ollama = getattr(app, "state", app).ollama  # type: ignore[union-attr]
 
+    if settings.poll_interval_seconds <= 0:
+        log.info("automatic polling disabled (poll_interval_seconds=0)")
+        return
+
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         _scheduled_poll,

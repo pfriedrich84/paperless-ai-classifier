@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     ocr_vision_dpi: int = 150
 
     # --- Worker ---
-    poll_interval_seconds: int = 300
+    poll_interval_seconds: int = 0
     context_max_docs: int = 5
     context_max_distance: float = 0.0  # 0 = no threshold; e.g. 1.5 filters irrelevant docs
     hybrid_search_weight: float = 0.7  # 0.0 = FTS only, 1.0 = vector only, 0.7 = default blend
@@ -350,7 +350,7 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Poll Interval (seconds)",
         "number",
         restart="component",
-        help="Seconds between inbox polls",
+        help="Seconds between inbox polls (0 = disabled)",
     ),
     # --- GUI ---
     "gui_port": _fm("GUI", "Port", "number", restart="app", help="Web UI port (requires restart)"),
