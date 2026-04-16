@@ -165,6 +165,8 @@ Der Embedding-Index kann ueber die Settings-Seite komplett neu aufgebaut werden 
 | `tag_whitelist` | Staging fuer unbekannte Tags (name, times_seen, approved) |
 | `errors` | Fehler-Audit-Trail (stage, document_id, message) |
 | `audit_log` | Aktions-Audit-Trail (commit, reject, prompt_update) |
+| `poll_cycles` | Zusammenfassung pro `poll_inbox()`-Aufruf (started_at, finished_at, succeeded, failed, skipped) |
+| `phase_timing` | Pro-Dokument-Pro-Phase Verarbeitungsdauer (poll_cycle_id, phase, duration_ms, success) |
 
 ## Docker-Deployment
 
