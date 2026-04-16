@@ -76,6 +76,13 @@ class OllamaClient:
             log.info("model unloaded", model=model)
         except Exception as exc:
             log.warning("failed to unload model", model=model, error=str(exc))
+        # Give the GPU time to fully free memory before loading the next model.
+        # Without this delay, Ollama's GPU discovery may timeout and use stale
+        # VRAM readings, leading to suboptimal GPU/CPU weight distribution.
+        delay = settings.ollama_model_swap_delay
+        if delay > 0:
+            log.debug("waiting for GPU memory recovery", delay_s=delay)
+            await asyncio.sleep(delay)
 
     async def model_available(self, name: str) -> bool:
         try:

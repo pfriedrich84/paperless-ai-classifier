@@ -320,3 +320,38 @@ async def test_chat_vision_json_passes_custom_num_ctx(client: OllamaClient):
 
     sent_payload = client._client.post.call_args[1]["json"]
     assert sent_payload["options"]["num_ctx"] == 131072
+
+
+# ---------------------------------------------------------------------------
+# unload_model — model swap delay
+# ---------------------------------------------------------------------------
+async def test_unload_model_sleeps_for_swap_delay(client: OllamaClient):
+    """unload_model() waits for the configured swap delay after unloading."""
+    client._client.post = AsyncMock(
+        return_value=httpx.Response(200, request=httpx.Request("POST", "http://test/api/generate"))
+    )
+
+    with (
+        patch("app.clients.ollama.settings") as mock_settings,
+        patch("app.clients.ollama.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+    ):
+        mock_settings.ollama_model_swap_delay = 5.0
+        await client.unload_model("test-model")
+
+    mock_sleep.assert_awaited_once_with(5.0)
+
+
+async def test_unload_model_skips_sleep_when_zero(client: OllamaClient):
+    """unload_model() does not sleep when swap delay is 0."""
+    client._client.post = AsyncMock(
+        return_value=httpx.Response(200, request=httpx.Request("POST", "http://test/api/generate"))
+    )
+
+    with (
+        patch("app.clients.ollama.settings") as mock_settings,
+        patch("app.clients.ollama.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+    ):
+        mock_settings.ollama_model_swap_delay = 0
+        await client.unload_model("test-model")
+
+    mock_sleep.assert_not_awaited()
