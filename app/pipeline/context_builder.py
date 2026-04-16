@@ -66,12 +66,19 @@ def store_embedding(doc: PaperlessDocument, embedding: list[float]) -> None:
     """
     blob = _serialize_embedding(embedding)
     with get_conn() as conn:
-        # vec0 virtual tables do not support INSERT OR REPLACE — delete then insert
-        conn.execute("DELETE FROM doc_embeddings WHERE document_id = ?", (doc.id,))
-        conn.execute(
-            "INSERT INTO doc_embeddings(document_id, embedding) VALUES (?, ?)",
-            (doc.id, blob),
-        )
+        # vec0 virtual tables do not support INSERT OR REPLACE — delete then insert.
+        # Wrap in explicit transaction so a failed INSERT cannot leave a hole.
+        conn.execute("BEGIN")
+        try:
+            conn.execute("DELETE FROM doc_embeddings WHERE document_id = ?", (doc.id,))
+            conn.execute(
+                "INSERT INTO doc_embeddings(document_id, embedding) VALUES (?, ?)",
+                (doc.id, blob),
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
         conn.execute(
             """
             INSERT OR REPLACE INTO doc_embedding_meta
