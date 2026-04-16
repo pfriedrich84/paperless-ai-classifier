@@ -167,14 +167,18 @@
 {% if suggestions %}
 <script>
 (function() {
+    function isVisible(el) {
+        return el.offsetParent !== null;
+    }
     function getChecked() {
-        return document.querySelectorAll('.bulk-check:checked');
+        return Array.from(document.querySelectorAll('.bulk-check:checked')).filter(isVisible);
     }
     function getAllChecks() {
-        return document.querySelectorAll('.bulk-check');
+        return Array.from(document.querySelectorAll('.bulk-check')).filter(isVisible);
     }
     function updateBulkBar() {
-        var count = getChecked().length;
+        var checked = getChecked();
+        var count = checked.length;
         var bar = document.getElementById('bulk-actions');
         var label = document.getElementById('bulk-count');
         if (!bar || !label) return;
@@ -193,11 +197,16 @@
     }
     document.addEventListener('change', function(e) {
         if (e.target.classList.contains('bulk-check')) {
+            /* Sync the counterpart checkbox in the other layout */
+            var val = e.target.value;
+            document.querySelectorAll('.bulk-check[value="' + val + '"]').forEach(function(cb) {
+                cb.checked = e.target.checked;
+            });
             updateBulkBar();
         }
         if (e.target.id === 'select-all-desktop' || e.target.id === 'select-all-mobile') {
             var checked = e.target.checked;
-            getAllChecks().forEach(function(cb) { cb.checked = checked; });
+            document.querySelectorAll('.bulk-check').forEach(function(cb) { cb.checked = checked; });
             updateBulkBar();
         }
     });
