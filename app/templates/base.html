@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Paperless AI Classifier{% endblock %}</title>
+    <title>{% block title %}ArchiBot{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/static/htmx.min.js"></script>
+    <link rel="icon" type="image/png" href="/static/logo.png">
     <link rel="stylesheet" href="/static/app.css">
     <script>
         tailwind.config = {
@@ -31,8 +32,9 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
             <div class="flex items-center space-x-8">
-                <a href="/" class="text-white font-bold text-lg tracking-tight">
-                    Paperless AI
+                <a href="/" class="flex items-center space-x-2 text-white font-bold text-lg tracking-tight">
+                    <img src="/static/logo.png" alt="ArchiBot" class="h-8 w-8 rounded">
+                    <span>ArchiBot</span>
                 </a>
                 <div class="hidden md:flex space-x-1">
                     {% set nav = {"/": "Dashboard", "/chat": "Chat", "/inbox": "Inbox", "/review": "Review", "/tags": "Tags", "/errors": "Errors", "/embeddings": "Embeddings", "/stats": "Stats", "/settings": "Settings"} %}
@@ -98,7 +100,7 @@
 <!-- Footer -->
 <footer class="border-t border-gray-200 mt-12">
     <div class="max-w-7xl mx-auto px-4 py-4 text-center text-sm text-gray-400">
-        Paperless AI Classifier v0.1.0
+        ArchiBot v0.1.0
     </div>
 </footer>
 

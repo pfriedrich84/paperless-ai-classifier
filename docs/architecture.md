@@ -1,6 +1,6 @@
 # Architektur
 
-Gesamtueberblick ueber den Aufbau und die Datenflussrichtung des Paperless AI Classifiers.
+Gesamtueberblick ueber den Aufbau und die Datenflussrichtung von ArchiBot.
 
 ## System-Kontext
 
@@ -11,7 +11,7 @@ Gesamtueberblick ueber den Aufbau und die Datenflussrichtung des Paperless AI Cl
                          │ HTTP
                          ▼
 ┌────────────────┐    ┌─────────────────────────────────┐    ┌──────────────┐
-│ Paperless-NGX  │◀──▶│   Paperless AI Classifier       │◀──▶│    Ollama     │
+│ Paperless-NGX  │◀──▶│   ArchiBot                      │◀──▶│    Ollama     │
 │                │    │   (FastAPI + Uvicorn)            │    │              │
 │ - Dokumente    │    │                                  │    │ - Chat (LLM) │
 │ - Metadaten    │    │   Port 8088  (GUI)               │    │ - Embeddings │

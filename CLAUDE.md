@@ -1,4 +1,4 @@
-# CLAUDE.md — paperless-ai-classifier
+# CLAUDE.md — ArchiBot
 
 Kontext fuer Claude / Claude Code, wenn an diesem Repo gearbeitet wird.
 

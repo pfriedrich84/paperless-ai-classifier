@@ -68,7 +68,7 @@ async def lifespan(server: FastMCP) -> AsyncIterator[Deps]:
 
 
 mcp = FastMCP(
-    name="paperless-ai-classifier",
+    name="archibot",
     instructions=(
         "MCP server for Paperless-NGX document management and AI classification. "
         "Use tools to search and browse documents, list entities (tags, correspondents, "

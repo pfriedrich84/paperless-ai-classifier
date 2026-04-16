@@ -217,7 +217,7 @@ async def test_telegram(
     try:
         payload = {
             "chat_id": telegram_chat_id,
-            "text": "Test from Paperless AI Classifier setup",
+            "text": "Test from ArchiBot setup",
             "parse_mode": "HTML",
         }
         r = await client._client.post(

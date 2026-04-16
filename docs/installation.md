@@ -1,6 +1,6 @@
 # Installation
 
-Anleitung zur Einrichtung des Paperless AI Classifiers — als fertiges Docker-Image
+Anleitung zur Einrichtung von ArchiBot — als fertiges Docker-Image
 oder selbst gebaut.
 
 ## Voraussetzungen

@@ -1,6 +1,10 @@
-# paperless-ai-classifier
+# ArchiBot
 
 [![AI Assisted](https://img.shields.io/badge/AI-Assisted-blueviolet)](https://github.com/pfriedrich84/paperless-ai-classifier)
+
+<p align="center">
+  <img src="app/static/logo-full.png" alt="ArchiBot Logo" width="256">
+</p>
 
 KI-basierter Klassifikator für [Paperless-NGX](https://docs.paperless-ngx.com/), der neu eingescannte Dokumente (Tag `Posteingang`) automatisch verprobt und Vorschläge für **Titel, Datum, Korrespondent, Dokumenttyp und Speicherpfad** erzeugt. Läuft als **ein einzelner Docker-Container** gegen eine lokale **Ollama**-Instanz.
 

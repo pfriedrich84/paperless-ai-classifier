@@ -182,7 +182,7 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         return JSONResponse(
             status_code=401,
             content={"detail": "Unauthorized"},
-            headers={"WWW-Authenticate": 'Basic realm="paperless-ai-classifier"'},
+            headers={"WWW-Authenticate": 'Basic realm="archibot"'},
         )
 
 
@@ -192,7 +192,7 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _configure_logging()
-    log.info("starting paperless-ai-classifier")
+    log.info("starting archibot")
 
     init_db()
     app.state.templates = templates
@@ -234,7 +234,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # App
 # ---------------------------------------------------------------------------
 app = FastAPI(
-    title="Paperless AI Classifier",
+    title="ArchiBot",
     version="0.1.0",
     lifespan=lifespan,
 )
