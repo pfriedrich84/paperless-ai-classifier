@@ -137,6 +137,7 @@ app/
     suggestions.py     Suggestion-Tools (list, get, approve, reject)
     tags.py            Tag-Whitelist- und Blacklist-Tools (list_proposals, approve, list_blacklisted, unblacklist)
     correspondents.py  Korrespondenten-Whitelist- und Blacklist-Tools (analog zu tags.py)
+    doctypes.py        Dokumenttyp-Whitelist- und Blacklist-Tools (analog zu tags.py)
     system.py          Status/Health-Tool
     resources.py       MCP Resources (inbox, pending suggestions)
   routes/
@@ -145,6 +146,7 @@ app/
     review.py          Review-Queue + Detail + Annehmen/Ablehnen
     tags.py            Tag-Whitelist- und Blacklist-Management
     correspondents.py  Korrespondenten-Whitelist- und Blacklist-Management (analog zu tags.py)
+    doctypes.py        Dokumenttyp-Whitelist- und Blacklist-Management (analog zu correspondents.py)
     ocr.py             OCR-Korrektur-Vorschlaege (optional)
     errors.py          Fehlerliste + Retry
     stats.py           Counters, Phasen-Dauer-Metriken, Trend-Chart, Fehlerrate, Auto-Commit-Rate
@@ -366,7 +368,7 @@ Embedding trotzdem indexiert (falls vorhanden).
 ## Wichtige Invarianten
 
 1. **Idempotenz:** Ein Dokument wird pro `updated_at`-Timestamp nur einmal verarbeitet. `processed_documents`-Tabelle haelt State.
-2. **Entity-Whitelist-Gate:** Neue vom LLM vorgeschlagene Tags landen in `tag_whitelist`, neue Korrespondenten in `correspondent_whitelist` — jeweils mit Status `pending`. Abgelehnte Eintraege werden in die jeweilige Blacklist (`tag_blacklist` / `correspondent_blacklist`) verschoben und bei zukuenftigen Vorschlaegen automatisch ignoriert. Bei Freigabe wird die Entity in Paperless angelegt und **retroaktiv** auf bereits committete Dokumente angewendet (`retroactive_tag_apply()` / `retroactive_correspondent_apply()` in `committer.py`).
+2. **Entity-Whitelist-Gate:** Neue vom LLM vorgeschlagene Tags landen in `tag_whitelist`, neue Korrespondenten in `correspondent_whitelist`, neue Dokumenttypen in `doctype_whitelist` — jeweils mit Status `pending`. Abgelehnte Eintraege werden in die jeweilige Blacklist (`tag_blacklist` / `correspondent_blacklist` / `doctype_blacklist`) verschoben und bei zukuenftigen Vorschlaegen automatisch ignoriert. Bei Freigabe wird die Entity in Paperless angelegt und **retroaktiv** auf bereits committete Dokumente angewendet (`retroactive_tag_apply()` / `retroactive_correspondent_apply()` / `retroactive_doctype_apply()` in `committer.py`).
 3. **Confidence-Gate:** Nur wenn `AUTO_COMMIT_CONFIDENCE > 0` UND das LLM einen Score darueber meldet wird ohne Review committed.
 4. **Read-Only bei Fehler:** Wenn Paperless oder Ollama nicht erreichbar sind, wird ein Error-Record geschrieben und der Worker macht weiter. Keine Pipeline-Level-Retries im selben Lauf. Ausnahme: `OllamaClient.embed()` hat HTTP-Level-Retries mit Truncation bei Context-Length-Fehlern und Backoff bei transienten 5xx (konfigurierbar via `OLLAMA_EMBED_RETRIES`).
 5. **Inbox-Tag bleibt:** Standardmaessig (`KEEP_INBOX_TAG=true`) wird der `Posteingang`-Tag nach Commit NICHT entfernt. Nur mit `KEEP_INBOX_TAG=false` wird er beim Commit entfernt.
@@ -492,11 +494,15 @@ MCP_TRANSPORT=sse MCP_PORT=3001 python -m app.mcp_server
 - `list_correspondents`, `list_document_types`, `list_tags`, `list_storage_paths`
 - `list_suggestions`, `get_suggestion`
 - `list_tag_proposals`, `list_blacklisted_tags`
+- `list_correspondent_proposals`, `list_blacklisted_correspondents`
+- `list_doctype_proposals`, `list_blacklisted_doctypes`
 - `classify_document` (rate-limited), `find_similar_documents`
 - `get_status`
 
 **Tools (write, opt-in via MCP_ENABLE_WRITE=true):**
 - `update_document`, `approve_suggestion`, `reject_suggestion`, `approve_tag`, `unblacklist_tag`
+- `approve_correspondent`, `unblacklist_correspondent`
+- `approve_doctype`, `unblacklist_doctype`
 
 **Resources:**
 - `paperless://suggestions/pending` — Offene Vorschlaege

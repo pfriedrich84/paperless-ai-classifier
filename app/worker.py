@@ -227,6 +227,29 @@ def _upsert_correspondent_whitelist(name: str) -> None:
             )
 
 
+def _upsert_doctype_whitelist(name: str) -> None:
+    """Insert a new document type proposal or bump its counter. Skips blacklisted."""
+    with get_conn() as conn:
+        bl = conn.execute("SELECT 1 FROM doctype_blacklist WHERE name = ?", (name,)).fetchone()
+        if bl:
+            log.debug("doctype blacklisted, skipping", doctype=name)
+            return
+
+        row = conn.execute(
+            "SELECT times_seen FROM doctype_whitelist WHERE name = ?", (name,)
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE doctype_whitelist SET times_seen = times_seen + 1 WHERE name = ?",
+                (name,),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO doctype_whitelist (name) VALUES (?)",
+                (name,),
+            )
+
+
 # ---------------------------------------------------------------------------
 # Suggestion storage
 # ---------------------------------------------------------------------------
@@ -245,6 +268,8 @@ def _store_suggestion(
     if corr_id is None and result.correspondent:
         _upsert_correspondent_whitelist(result.correspondent)
     dt_id = _resolve_entity(result.document_type, doctypes)
+    if dt_id is None and result.document_type:
+        _upsert_doctype_whitelist(result.document_type)
     sp_id = _resolve_entity(result.storage_path, storage_paths)
     _resolved_tag_ids, tag_dicts = _resolve_tags(
         [{"name": t.name, "confidence": t.confidence} for t in result.tags],

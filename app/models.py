@@ -164,6 +164,25 @@ class CorrespondentBlacklistEntry(BaseModel):
 
 
 # =============================================================================
+# Document type whitelist
+# =============================================================================
+class DoctypeWhitelistEntry(BaseModel):
+    name: str
+    paperless_id: int | None = None
+    approved: bool = False
+    first_seen: str
+    times_seen: int = 1
+    notes: str | None = None
+
+
+class DoctypeBlacklistEntry(BaseModel):
+    name: str
+    rejected_at: str
+    times_seen: int = 1
+    notes: str | None = None
+
+
+# =============================================================================
 # Review form payload from the GUI
 # =============================================================================
 class ReviewDecision(BaseModel):

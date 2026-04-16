@@ -85,6 +85,7 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 from app.mcp_tools.classify import register as register_classify  # noqa: E402
 from app.mcp_tools.correspondents import register as register_correspondents  # noqa: E402
+from app.mcp_tools.doctypes import register as register_doctypes  # noqa: E402
 from app.mcp_tools.documents import register as register_documents  # noqa: E402
 from app.mcp_tools.entities import register as register_entities  # noqa: E402
 from app.mcp_tools.resources import register as register_resources  # noqa: E402
@@ -100,6 +101,7 @@ register_classify(mcp)
 register_suggestions(mcp)
 register_tags(mcp)
 register_correspondents(mcp)
+register_doctypes(mcp)
 
 
 if __name__ == "__main__":
