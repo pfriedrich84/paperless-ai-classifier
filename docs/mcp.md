@@ -73,10 +73,11 @@ MCP_TRANSPORT=sse MCP_PORT=3001 python -m app.mcp_server
 | `MCP_API_KEY` | — | API-Key fuer Authentifizierung |
 | `MCP_CLASSIFY_RATE_LIMIT` | `10` | Max. Klassifikationen pro Stunde (0 = unbegrenzt) |
 
-## Claude Code Integration
+## Integration Examples
 
-Fuer die Nutzung mit Claude Code CLI die folgende Konfiguration in
-`.mcp.json` oder `.claude/settings.json` eintragen:
+Below are example configurations to connect the MCP server with client tools.
+
+### Local CLI Usage
 
 ```json
 {
@@ -95,7 +96,7 @@ Fuer die Nutzung mit Claude Code CLI die folgende Konfiguration in
 }
 ```
 
-Fuer SSE-Transport (z.B. Docker-Container als Remote-Server):
+### SSE Transport (e.g., Docker remote server)
 
 ```json
 {

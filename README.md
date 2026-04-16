@@ -1,6 +1,6 @@
 # paperless-ai-classifier
 
-[![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet?logo=claude&logoColor=white)](https://claude.ai/code)
+[![AI Assisted](https://img.shields.io/badge/AI-Assisted-blueviolet)](https://github.com/pfriedrich84/paperless-ai-classifier)
 
 KI-basierter Klassifikator für [Paperless-NGX](https://docs.paperless-ngx.com/), der neu eingescannte Dokumente (Tag `Posteingang`) automatisch verprobt und Vorschläge für **Titel, Datum, Korrespondent, Dokumenttyp und Speicherpfad** erzeugt. Läuft als **ein einzelner Docker-Container** gegen eine lokale **Ollama**-Instanz.
 
@@ -108,4 +108,4 @@ MIT — siehe `LICENSE`.
 
 ---
 
-Developed & maintained by [@pfriedrich84](https://github.com/pfriedrich84), AI-assisted with [Claude Code](https://claude.ai/code).
+Developed & maintained by [@pfriedrich84](https://github.com/pfriedrich84), AI‑assisted.
