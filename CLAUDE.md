@@ -76,7 +76,7 @@ Dieser Klassifikator geht einen fundamentalen Schritt weiter:
 Der Kontext allein genuegt nicht — zusaetzlich greifen mehrere Sicherheitsnetze:
 
 - **Entity-Whitelisting:** Das LLM darf nur existierende Korrespondenten, Dokumenttypen
-  und Speicherpfade vorschlagen. Neue Tags landen in einer Freigabe-Queue.
+  und Speicherpfade vorschlagen. Neue Tags und Korrespondenten landen in einer Freigabe-Queue.
 - **Confidence-Gate:** Nur bei explizit konfigurierter Mindest-Konfidenz wird
   automatisch committed — sonst immer manuelles Review.
 - **Inbox-Exclusion:** Noch nicht reviewte Dokumente werden nie als Kontext genutzt,
@@ -136,6 +136,7 @@ app/
     classify.py        KI-Tools (classify_document, find_similar)
     suggestions.py     Suggestion-Tools (list, get, approve, reject)
     tags.py            Tag-Whitelist- und Blacklist-Tools (list_proposals, approve, list_blacklisted, unblacklist)
+    correspondents.py  Korrespondenten-Whitelist- und Blacklist-Tools (analog zu tags.py)
     system.py          Status/Health-Tool
     resources.py       MCP Resources (inbox, pending suggestions)
   routes/
@@ -143,6 +144,7 @@ app/
     chat.py            RAG-Chat: Fragen zu Dokumenten stellen (/chat)
     review.py          Review-Queue + Detail + Annehmen/Ablehnen
     tags.py            Tag-Whitelist- und Blacklist-Management
+    correspondents.py  Korrespondenten-Whitelist- und Blacklist-Management (analog zu tags.py)
     ocr.py             OCR-Korrektur-Vorschlaege (optional)
     errors.py          Fehlerliste + Retry
     stats.py           Counters, Phasen-Dauer-Metriken, Trend-Chart, Fehlerrate, Auto-Commit-Rate
@@ -364,7 +366,7 @@ Embedding trotzdem indexiert (falls vorhanden).
 ## Wichtige Invarianten
 
 1. **Idempotenz:** Ein Dokument wird pro `updated_at`-Timestamp nur einmal verarbeitet. `processed_documents`-Tabelle haelt State.
-2. **Tag-Whitelist-Gate:** `tags`-Updates in Paperless passieren NUR mit IDs, die in der Whitelist stehen. Neue vom LLM vorgeschlagene Tags landen in `tag_whitelist` mit Status `pending`. Abgelehnte Tags werden in `tag_blacklist` verschoben und bei zukuenftigen Vorschlaegen automatisch ignoriert. Bei Freigabe eines pending Tags wird dieser **retroaktiv** auf bereits committete Dokumente angewendet (PATCH in Paperless) und in offenen Vorschlaegen voraufgeloest (`retroactive_tag_apply()` in `committer.py`).
+2. **Entity-Whitelist-Gate:** Neue vom LLM vorgeschlagene Tags landen in `tag_whitelist`, neue Korrespondenten in `correspondent_whitelist` — jeweils mit Status `pending`. Abgelehnte Eintraege werden in die jeweilige Blacklist (`tag_blacklist` / `correspondent_blacklist`) verschoben und bei zukuenftigen Vorschlaegen automatisch ignoriert. Bei Freigabe wird die Entity in Paperless angelegt und **retroaktiv** auf bereits committete Dokumente angewendet (`retroactive_tag_apply()` / `retroactive_correspondent_apply()` in `committer.py`).
 3. **Confidence-Gate:** Nur wenn `AUTO_COMMIT_CONFIDENCE > 0` UND das LLM einen Score darueber meldet wird ohne Review committed.
 4. **Read-Only bei Fehler:** Wenn Paperless oder Ollama nicht erreichbar sind, wird ein Error-Record geschrieben und der Worker macht weiter. Keine Pipeline-Level-Retries im selben Lauf. Ausnahme: `OllamaClient.embed()` hat HTTP-Level-Retries mit Truncation bei Context-Length-Fehlern und Backoff bei transienten 5xx (konfigurierbar via `OLLAMA_EMBED_RETRIES`).
 5. **Inbox-Tag bleibt:** Standardmaessig (`KEEP_INBOX_TAG=true`) wird der `Posteingang`-Tag nach Commit NICHT entfernt. Nur mit `KEEP_INBOX_TAG=false` wird er beim Commit entfernt.
