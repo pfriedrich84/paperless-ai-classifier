@@ -247,6 +247,19 @@ async def test_chat_json_strips_bare_fences(client: OllamaClient):
     assert result == payload
 
 
+async def test_chat_json_strips_yaml_fence(client: OllamaClient):
+    """JSON prefixed with '---' (YAML frontmatter delimiter) should parse."""
+    payload = {"title": "Laborbefund", "confidence": 90}
+    fenced = f"---\n{json.dumps(payload)}"
+    client._client.post = AsyncMock(return_value=_make_chat_response(fenced))
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_num_ctx = 4096
+        result = await client.chat_json(system="sys", user="usr")
+
+    assert result == payload
+
+
 async def test_chat_json_raises_on_invalid_content(client: OllamaClient):
     """Truly invalid (non-JSON, non-fenced) content raises ValueError."""
     client._client.post = AsyncMock(return_value=_make_chat_response("this is not json at all"))

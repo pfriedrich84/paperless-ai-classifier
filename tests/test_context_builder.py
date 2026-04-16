@@ -391,15 +391,17 @@ class TestStoreEmbedding:
         ):
             store_embedding(doc, embedding)
 
-        # 4 SQL executions: doc_embeddings + doc_embedding_meta + FTS delete + FTS insert
-        assert mock_conn.execute.call_count == 4
-        embed_sql = mock_conn.execute.call_args_list[0][0][0]
-        assert "doc_embeddings" in embed_sql
-        meta_sql = mock_conn.execute.call_args_list[1][0][0]
+        # 5 SQL executions: vec0 delete + vec0 insert + meta + FTS delete + FTS insert
+        assert mock_conn.execute.call_count == 5
+        embed_del_sql = mock_conn.execute.call_args_list[0][0][0]
+        assert "DELETE FROM doc_embeddings" in embed_del_sql
+        embed_ins_sql = mock_conn.execute.call_args_list[1][0][0]
+        assert "INSERT INTO doc_embeddings" in embed_ins_sql
+        meta_sql = mock_conn.execute.call_args_list[2][0][0]
         assert "doc_embedding_meta" in meta_sql
-        fts_del_sql = mock_conn.execute.call_args_list[2][0][0]
+        fts_del_sql = mock_conn.execute.call_args_list[3][0][0]
         assert "DELETE FROM doc_fts" in fts_del_sql
-        fts_ins_sql = mock_conn.execute.call_args_list[3][0][0]
+        fts_ins_sql = mock_conn.execute.call_args_list[4][0][0]
         assert "INSERT INTO doc_fts" in fts_ins_sql
 
 

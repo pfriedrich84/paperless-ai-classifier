@@ -16,12 +16,17 @@ from app.config import settings
 log = structlog.get_logger(__name__)
 
 _MD_JSON_RE = re.compile(r"^\s*```(?:json)?\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)
+_YAML_FENCE_RE = re.compile(r"^\s*---\s*\n", re.MULTILINE)
 
 
 def _strip_markdown_fences(text: str) -> str:
-    """Remove markdown code fences wrapping JSON, if present."""
+    """Remove markdown code fences or YAML frontmatter delimiters wrapping JSON."""
     m = _MD_JSON_RE.match(text)
-    return m.group(1).strip() if m else text
+    if m:
+        return m.group(1).strip()
+    # Some models prepend "---" (YAML frontmatter) before JSON
+    stripped = _YAML_FENCE_RE.sub("", text).strip()
+    return stripped if stripped != text.strip() else text
 
 
 class OllamaClient:

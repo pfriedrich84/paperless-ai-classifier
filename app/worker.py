@@ -643,7 +643,7 @@ async def _phase_classify(
         except Exception as exc:
             errored += 1
             _poll_progress.failed += 1
-            log.error("classification failed", doc_id=doc.id, error=str(exc))
+            log.error("classification failed", doc_id=doc.id, error=repr(exc))
             _write_error("classify", doc.id, exc)
             _record_timing(cycle_id, doc.id, "classify", t0, success=False)
         finally:
