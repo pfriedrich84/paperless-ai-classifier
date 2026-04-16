@@ -76,7 +76,7 @@ docker run --rm -v classifier-data:/data -v $(pwd):/backup \
 
 ### Reset
 
-Container-State zuruecksetzen: siehe [CLI-Dokumentation](./cli.md#reset--container-zuruecksetzen).
+Container-State zuruecksetzen: siehe [CLI-Dokumentation](./cli.md#reset).
 
 ```bash
 # Nur DB zuruecksetzen
