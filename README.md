@@ -9,7 +9,7 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
 ## Features
 
 - 🔍 Polling von Paperless-NGX nach Dokumenten mit Tag `Posteingang`
-- 🧠 Klassifikation via Ollama (Default: `gemma4:26b-a4b-it-q4_K_M`, konfigurierbar)
+- 🧠 Klassifikation via Ollama (Default: `gemma4:e4b`, konfigurierbar)
 - 📚 Kontextaware durch Embedding-Similarity-Search über bereits klassifizierte Dokumente (`sqlite-vec`) — Kontext-Dokumente liefern ihre vollständige Klassifikation (Korrespondent, Typ, Tags, Speicherpfad) als Referenz
 - ✅ Review-GUI mit HTMX: Annehmen / Ablehnen / Editieren in einem Klick
 - 🏷️ Tag-Whitelist: Neue Tags werden vorgeschlagen, aber erst nach Freigabe in Paperless angelegt
@@ -75,7 +75,7 @@ cp .env.example .env
 # → Werte eintragen (Paperless-URL, Token, Ollama-URL, Inbox-Tag-ID)
 
 # 2. Ollama-Modelle ziehen (auf dem Ollama-Host)
-ollama pull gemma4:26b-a4b-it-q4_K_M
+ollama pull gemma4:e4b
 ollama pull qwen3-embedding:0.6b
 ollama pull qwen3:0.6b            # OCR-Korrektur (optional)
 ollama pull qwen3-vl:2b           # Vision-OCR (optional)
