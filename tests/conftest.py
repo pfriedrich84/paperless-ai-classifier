@@ -81,6 +81,7 @@ def patch_db(tmp_db: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("app.pipeline.committer.get_conn", lambda: _mock_get_conn(tmp_db))
     monkeypatch.setattr("app.routes.review.get_conn", lambda: _mock_get_conn(tmp_db))
     monkeypatch.setattr("app.routes.correspondents.get_conn", lambda: _mock_get_conn(tmp_db))
+    monkeypatch.setattr("app.routes.doctypes.get_conn", lambda: _mock_get_conn(tmp_db))
 
 
 @pytest.fixture()

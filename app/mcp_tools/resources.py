@@ -70,6 +70,9 @@ def register(mcp: FastMCP) -> None:
             pending_correspondents = conn.execute(
                 "SELECT COUNT(*) FROM correspondent_whitelist WHERE approved = 0"
             ).fetchone()[0]
+            pending_doctypes = conn.execute(
+                "SELECT COUNT(*) FROM doctype_whitelist WHERE approved = 0"
+            ).fetchone()[0]
 
         return json.dumps(
             {
@@ -79,5 +82,6 @@ def register(mcp: FastMCP) -> None:
                 "errors_last_24h": errors,
                 "tags_pending_approval": pending_tags,
                 "correspondents_pending_approval": pending_correspondents,
+                "doctypes_pending_approval": pending_doctypes,
             }
         )
