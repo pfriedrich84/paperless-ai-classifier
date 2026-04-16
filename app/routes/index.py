@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.db import get_conn
-from app.worker import cancel_poll, get_poll_progress, start_poll_task
+from app.worker import _has_embedding_index, cancel_poll, get_poll_progress, start_poll_task
 
 log = structlog.get_logger(__name__)
 router = APIRouter()
@@ -161,7 +161,23 @@ async def pipeline_status(request: Request):
 @router.post("/trigger-poll-dashboard")
 async def trigger_poll_dashboard(request: Request):
     """Start a manual poll and return an updated pipeline status card."""
-    start_poll_task()
+    started = start_poll_task()
+    if not started:
+        poll = get_poll_progress()
+        if not poll.running:
+            # Poll couldn't start — show reason as a toast inside the status card
+            if not _has_embedding_index():
+                reason = "No embedding index — run Reindex first"
+            else:
+                reason = "Reindex in progress"
+            with get_conn() as conn:
+                last_poll_row = _last_poll(conn)
+            next_run = _next_run_iso(request)
+            html = _render_pipeline_status(poll, last_poll_row, next_run)
+            # Inject warning banner before closing </div>
+            warning = f'<div class="mt-3 text-sm text-amber-600 font-medium">{reason}</div>'
+            html = html[: html.rfind("</div>")] + warning + "</div>"
+            return HTMLResponse(html)
     poll = get_poll_progress()
     with get_conn() as conn:
         last_poll = _last_poll(conn)

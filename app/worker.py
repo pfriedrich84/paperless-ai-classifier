@@ -822,7 +822,27 @@ async def _scheduled_poll() -> None:
     if _poll_progress.running:
         log.info("manual poll in progress — skipping scheduled poll")
         return
-    await poll_inbox()
+    if is_reindexing() or not _has_embedding_index():
+        return
+
+    _poll_progress.running = True
+    _poll_progress.total = 0
+    _poll_progress.done = 0
+    _poll_progress.succeeded = 0
+    _poll_progress.failed = 0
+    _poll_progress.skipped = 0
+    _poll_progress.phase = "prepare"
+    _poll_progress.cancelled = False
+    _poll_progress.error = None
+    _poll_progress.started_at = datetime.now(tz=UTC).isoformat()
+    _poll_progress.cycle_id = None
+    try:
+        await poll_inbox()
+    except Exception as exc:
+        _poll_progress.error = str(exc)
+        log.error("scheduled poll failed", error=str(exc))
+    finally:
+        _poll_progress.running = False
 
 
 def start_scheduler(app: object) -> None:
