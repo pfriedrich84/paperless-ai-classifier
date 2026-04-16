@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # --- Ollama ---
     ollama_url: str = "http://ollama:11434"
-    ollama_model: str = "gemma4:26b-a4b-it-q4_K_M"
+    ollama_model: str = "gemma4:e4b"
     ollama_embed_model: str = "qwen3-embedding:0.6b"
     ollama_ocr_model: str = "qwen3:0.6b"
     ollama_timeout_seconds: int = 300
@@ -315,7 +315,7 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Phase 3: Klassifikation",
         "Classification Model",
         restart="component",
-        help="Ollama model for classification (e.g. gemma4:26b-a4b-it-q4_K_M)",
+        help="Ollama model for classification (e.g. gemma4:e4b)",
     ),
     "ollama_num_ctx": _fm(
         "Phase 3: Klassifikation",

@@ -38,7 +38,7 @@ Dieser Klassifikator geht einen fundamentalen Schritt weiter:
                "Diese 3 aehnlichen Dokumente wurden so klassifiziert: ..."
                + Zieldokument
                        |
-                  [Klassifikation]     ← gemma4:26b-a4b-it-q4_K_M
+                  [Klassifikation]     ← gemma4:e4b
                        |
                 JSON-Vorschlag mit hoher Konfidenz
 ```
@@ -62,7 +62,7 @@ Dieser Klassifikator geht einen fundamentalen Schritt weiter:
    aus dem Kontext — ein generischer Prompt wuerde raten.
 
 4. **Kleine Modelle, grosse Ergebnisse:** Durch den reichen Kontext kann ein
-   kompaktes Modell wie `gemma4:26b-a4b-it-q4_K_M` Ergebnisse liefern,
+   kompaktes Modell wie `gemma4:e4b` Ergebnisse liefern,
    die ohne Kontext ein deutlich groesseres Modell erfordern wuerden. Der Kontext
    kompensiert fehlende Modellkapazitaet.
 
@@ -209,7 +209,7 @@ Alle Requests: `Authorization: Token <PAPERLESS_TOKEN>`
 | Modell | Zweck | Konfiguration | Context Window |
 |--------|-------|---------------|----------------|
 | `qwen3-embedding:0.6b` | Embedding-Similarity-Suche (1024-dim) | `OLLAMA_EMBED_MODEL` | 8192 Tokens (`OLLAMA_EMBED_NUM_CTX`, model supports 32K) |
-| `gemma4:26b-a4b-it-q4_K_M` | Klassifikation (Titel, Datum, etc.) | `OLLAMA_MODEL` | 16384 Tokens (`OLLAMA_NUM_CTX`) |
+| `gemma4:e4b` | Klassifikation (Titel, Datum, etc.) | `OLLAMA_MODEL` | 16384 Tokens (`OLLAMA_NUM_CTX`) |
 | `qwen3:0.6b` | Text-Only OCR-Korrektur (optional) | `OLLAMA_OCR_MODEL` | 16384 Tokens (`OLLAMA_OCR_NUM_CTX`) |
 | `qwen3-vl:2b` | Vision-OCR (optional, seitenweise) | `OCR_VISION_MODEL` | 16384 Tokens (`OLLAMA_OCR_NUM_CTX`) |
 
@@ -312,7 +312,7 @@ jeder Modellwechsel kostet mehrere Sekunden (entladen + laden).
                   |         |
                +--+---------+----------------+
                | Phase 3: Klassifikation     |  OLLAMA_MODEL
-               | Fuer alle Docs:             |  (gemma4:26b-a4b-it-q4_K_M)
+               | Fuer alle Docs:             |  (gemma4:e4b)
                |   Text: max MAX_DOC_CHARS   |  num_ctx: OLLAMA_NUM_CTX
                |   classify() mit Kontext    |  (Default: 16384 Tokens)
                |   Suggestion speichern      |
@@ -344,9 +344,9 @@ Vorher (pro Dokument):     Doc1: embed → classify → embed → Doc2: embed �
 Nachher (phasenweise):     [alle embed] → [alle classify]
                            = 1-2 Switches unabhaengig von N
 
-Ohne OCR:        qwen3-embed ─────────> gemma4:26b               = 1 Switch
-Text-OCR:        qwen3:0.6b ──> qwen3-embed ────> gemma4:26b    = 2 Switches
-Vision-OCR:      qwen3-vl:2b ─> qwen3-embed ────> gemma4:26b    = 2 Switches
+Ohne OCR:        qwen3-embed ─────────> gemma4:e4b               = 1 Switch
+Text-OCR:        qwen3:0.6b ──> qwen3-embed ────> gemma4:e4b    = 2 Switches
+Vision-OCR:      qwen3-vl:2b ─> qwen3-embed ────> gemma4:e4b    = 2 Switches
 
 * OCR nutzt separate Modelle (qwen3:0.6b / qwen3-vl:2b), daher immer
   2 Switches wenn OCR aktiv. Jedes Modell wird nach seiner Phase entladen.
