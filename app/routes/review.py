@@ -265,7 +265,7 @@ def _bulk_oob_fragments(sid: int, css_bg: str, css_text: str, label: str) -> str
 async def bulk_approve(request: Request):
     form = await request.form()
     raw_ids = form.getlist("suggestion_ids")
-    ids = [int(x) for x in raw_ids if str(x).isdigit()]
+    ids = list(dict.fromkeys(int(x) for x in raw_ids if str(x).isdigit()))
 
     if not ids:
         resp = HTMLResponse('<div id="bulk-result"></div>')
@@ -322,7 +322,7 @@ async def bulk_approve(request: Request):
 async def bulk_reject(request: Request):
     form = await request.form()
     raw_ids = form.getlist("suggestion_ids")
-    ids = [int(x) for x in raw_ids if str(x).isdigit()]
+    ids = list(dict.fromkeys(int(x) for x in raw_ids if str(x).isdigit()))
 
     if not ids:
         resp = HTMLResponse('<div id="bulk-result"></div>')
