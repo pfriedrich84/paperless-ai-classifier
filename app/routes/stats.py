@@ -103,10 +103,10 @@ async def stats_page(request: Request):
             """
             SELECT ROUND(AVG(total_ms)) AS avg_ms, COUNT(*) AS cnt
             FROM (
-                SELECT document_id, SUM(duration_ms) AS total_ms
+                SELECT poll_cycle_id, document_id, SUM(duration_ms) AS total_ms
                 FROM phase_timing
                 WHERE success = 1 AND started_at >= datetime('now', '-30 days')
-                GROUP BY document_id
+                GROUP BY poll_cycle_id, document_id
             )
             """
         ).fetchone()

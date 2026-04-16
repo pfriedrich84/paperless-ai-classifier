@@ -163,6 +163,9 @@ Der Embedding-Index kann ueber die Settings-Seite komplett neu aufgebaut werden 
 | `doc_embeddings` | Virtuelle sqlite-vec Tabelle fuer Vektor-Similarity (1024-dim) |
 | `doc_embedding_meta` | Metadaten zu Embeddings (document_id, title, created_at) |
 | `tag_whitelist` | Staging fuer unbekannte Tags (name, times_seen, approved) |
+| `tag_blacklist` | Abgelehnte Tags — werden bei zukuenftigen Vorschlaegen ignoriert |
+| `doc_ocr_cache` | Lokal gecachter korrigierter OCR-Text (nie zurueck nach Paperless) |
+| `doc_fts` | FTS5 Volltext-Suchindex (title, content) fuer Hybrid-Suche |
 | `errors` | Fehler-Audit-Trail (stage, document_id, message) |
 | `audit_log` | Aktions-Audit-Trail (commit, reject, prompt_update) |
 | `poll_cycles` | Zusammenfassung pro `poll_inbox()`-Aufruf (started_at, finished_at, succeeded, failed, skipped) |

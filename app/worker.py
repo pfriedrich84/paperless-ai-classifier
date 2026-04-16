@@ -743,43 +743,47 @@ async def poll_inbox() -> None:
             (cycle_id, len(batch), skipped),
         )
 
-    # --- Phase 1: OCR correction (optional, mode-dependent) ---
-    _poll_progress.phase = "ocr"
-    if _poll_progress.cancelled:
-        log.info("poll cancelled before OCR phase")
-        return
-    batch = await _phase_ocr(batch, _ollama, _paperless, cycle_id)
+    classified = 0
+    auto_committed = 0
+    errored = 0
+    try:
+        # --- Phase 1: OCR correction (optional, mode-dependent) ---
+        _poll_progress.phase = "ocr"
+        if _poll_progress.cancelled:
+            log.info("poll cancelled before OCR phase")
+            return
+        batch = await _phase_ocr(batch, _ollama, _paperless, cycle_id)
 
-    # --- Phase 2: Embedding + context search (embed model) ---
-    _poll_progress.phase = "embed"
-    if _poll_progress.cancelled:
-        log.info("poll cancelled before embed phase")
-        return
-    embed_results = await _phase_embed(batch, _paperless, _ollama, cycle_id)
+        # --- Phase 2: Embedding + context search (embed model) ---
+        _poll_progress.phase = "embed"
+        if _poll_progress.cancelled:
+            log.info("poll cancelled before embed phase")
+            return
+        embed_results = await _phase_embed(batch, _paperless, _ollama, cycle_id)
 
-    # --- Phase 3: Classification + post-processing (chat model) ---
-    _poll_progress.phase = "classify"
-    if _poll_progress.cancelled:
-        log.info("poll cancelled before classify phase")
-        return
-    classified, auto_committed, errored = await _phase_classify(
-        batch,
-        embed_results,
-        _paperless,
-        _ollama,
-        correspondents,
-        doctypes,
-        storage_paths,
-        tags,
-        cycle_id,
-    )
-
-    # Finalize the poll cycle record
-    with get_conn() as conn:
-        conn.execute(
-            "UPDATE poll_cycles SET finished_at = datetime('now'), succeeded = ?, failed = ? WHERE id = ?",
-            (classified + auto_committed, errored, cycle_id),
+        # --- Phase 3: Classification + post-processing (chat model) ---
+        _poll_progress.phase = "classify"
+        if _poll_progress.cancelled:
+            log.info("poll cancelled before classify phase")
+            return
+        classified, auto_committed, errored = await _phase_classify(
+            batch,
+            embed_results,
+            _paperless,
+            _ollama,
+            correspondents,
+            doctypes,
+            storage_paths,
+            tags,
+            cycle_id,
         )
+    finally:
+        # Always finalize the poll cycle record (including cancellations)
+        with get_conn() as conn:
+            conn.execute(
+                "UPDATE poll_cycles SET finished_at = datetime('now'), succeeded = ?, failed = ? WHERE id = ?",
+                (classified + auto_committed, errored, cycle_id),
+            )
 
     log.info(
         "poll cycle complete",
