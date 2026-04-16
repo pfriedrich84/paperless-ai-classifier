@@ -316,7 +316,7 @@ class TestPhaseEmbed:
         mock_ollama.embed_model = "nomic-embed-text-v2-moe"
         mock_ollama.unload_model = AsyncMock()
         mock_paperless = AsyncMock()
-        results = await _phase_embed(docs, mock_paperless, mock_ollama)
+        results = await _phase_embed(docs, mock_paperless, mock_ollama, "test_cycle")
 
         # Exactly 3 embed calls — one per doc
         assert mock_ollama.embed.call_count == 3
@@ -331,7 +331,7 @@ class TestPhaseEmbed:
         mock_ollama.embed_model = "nomic-embed-text-v2-moe"
         mock_ollama.unload_model = AsyncMock()
 
-        results = await _phase_embed(docs, AsyncMock(), mock_ollama)
+        results = await _phase_embed(docs, AsyncMock(), mock_ollama, "test_cycle")
 
         assert results[1].embedding is None
         assert results[1].similar_results == []
@@ -343,7 +343,7 @@ class TestPhaseEmbed:
         mock_ollama.embed = AsyncMock(return_value=[0.1] * EMBED_DIM)
         mock_ollama.embed_model = "nomic-embed-text-v2-moe"
         mock_ollama.unload_model = AsyncMock()
-        await _phase_embed([_make_doc(1)], AsyncMock(), mock_ollama)
+        await _phase_embed([_make_doc(1)], AsyncMock(), mock_ollama, "test_cycle")
 
         mock_ollama.unload_model.assert_called_once_with("nomic-embed-text-v2-moe")
 
@@ -366,7 +366,7 @@ class TestPhaseOcr:
             patch("app.worker.cache_ocr_correction"),
         ):
             mock_ocr.return_value = ("fixed text", 3)
-            result = await _phase_ocr([doc], mock_ollama, mock_paperless)
+            result = await _phase_ocr([doc], mock_ollama, mock_paperless, "test_cycle")
 
         assert result[0].content == "fixed text"
         mock_ollama.unload_model.assert_called_once_with("qwen3:0.6b")
@@ -380,7 +380,7 @@ class TestPhaseOcr:
         mock_paperless = AsyncMock()
 
         with patch("app.worker.effective_ocr_mode", return_value="off"):
-            result = await _phase_ocr(docs, mock_ollama, mock_paperless)
+            result = await _phase_ocr(docs, mock_ollama, mock_paperless, "test_cycle")
 
         assert result == docs
         mock_ollama.unload_model.assert_not_called()
@@ -398,7 +398,7 @@ class TestPhaseOcr:
             patch("app.worker.effective_ocr_mode", return_value="text"),
             patch("app.worker.maybe_correct_ocr", side_effect=RuntimeError("fail")),
         ):
-            result = await _phase_ocr([doc], mock_ollama, mock_paperless)
+            result = await _phase_ocr([doc], mock_ollama, mock_paperless, "test_cycle")
 
         assert result[0].content == "original text"
 
@@ -448,7 +448,7 @@ class TestPhaseClassify:
             mock_store.return_value = AsyncMock(id=1, proposed_correspondent_id=None)
 
             _classified, _auto_committed, _errored = await _phase_classify(
-                [doc], embed_results, AsyncMock(), mock_ollama, [], [], [], []
+                [doc], embed_results, AsyncMock(), mock_ollama, [], [], [], [], "test_cycle"
             )
 
         # Verify classify was called with the context doc from embedding phase
@@ -491,6 +491,7 @@ class TestPhaseClassify:
                 [],
                 [],
                 [],
+                "test_cycle",
             )
 
         mock_ollama.unload_model.assert_called_once_with("gemma3:4b")
@@ -515,7 +516,7 @@ class TestPhaseClassify:
         ):
             mock_settings.auto_commit_confidence = 0
             _classified, _auto_committed, errored = await _phase_classify(
-                [doc], embed_results, AsyncMock(), mock_ollama, [], [], [], []
+                [doc], embed_results, AsyncMock(), mock_ollama, [], [], [], [], "test_cycle"
             )
 
         assert errored == 1

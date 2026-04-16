@@ -23,8 +23,95 @@
     </div>
 </div>
 
+<!-- Processing Duration (per phase) -->
+<h2 class="text-lg font-semibold text-gray-700 mb-4">Processing Duration (30-day avg per document)</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    {% for phase_key, phase_label in [('ocr', 'OCR Correction'), ('embed', 'Embedding'), ('classify', 'Classification')] %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <p class="text-sm font-medium text-gray-500">{{ phase_label }}</p>
+        {% if phase_key in phase_avgs %}
+        {% set stats = phase_avgs[phase_key] %}
+        <p class="mt-2 text-3xl font-bold text-gray-900">{{ "%.1f"|format(stats.avg_ms / 1000) }}s</p>
+        <p class="text-xs text-gray-400 mt-1">
+            min {{ "%.1f"|format(stats.min_ms / 1000) }}s / max {{ "%.1f"|format(stats.max_ms / 1000) }}s
+            ({{ stats.count }} docs)
+        </p>
+        {% else %}
+        <p class="mt-2 text-3xl font-bold text-gray-400">--</p>
+        <p class="text-xs text-gray-400 mt-1">No data yet</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <p class="text-sm font-medium text-gray-500">Total Pipeline</p>
+        {% if avg_total_count > 0 %}
+        <p class="mt-2 text-3xl font-bold text-primary-600">{{ "%.1f"|format(avg_total_ms / 1000) }}s</p>
+        <p class="text-xs text-gray-400 mt-1">avg end-to-end ({{ avg_total_count }} docs)</p>
+        {% else %}
+        <p class="mt-2 text-3xl font-bold text-gray-400">--</p>
+        <p class="text-xs text-gray-400 mt-1">No data yet</p>
+        {% endif %}
+    </div>
+</div>
+
 <!-- Chart.js (shared by all charts) -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+
+<!-- Duration Trend (7 days) -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+    <h2 class="text-lg font-semibold text-gray-700 mb-4">Duration Trend (Last 7 Days)</h2>
+    {% if daily_timing %}
+    <canvas id="durationChart" height="100"></canvas>
+    <script>
+    (function() {
+        var raw = {{ daily_timing | tojson }};
+        // Pivot: collect unique days and build per-phase series
+        var daySet = [];
+        var byPhase = {};
+        raw.forEach(function(r) {
+            if (daySet.indexOf(r.day) === -1) daySet.push(r.day);
+            if (!byPhase[r.phase]) byPhase[r.phase] = {};
+            byPhase[r.phase][r.day] = r.avg_ms / 1000.0;
+        });
+        daySet.sort();
+        var colors = {
+            'ocr':      { bg: 'rgba(245, 158, 11, 0.6)', border: 'rgb(245, 158, 11)' },
+            'embed':    { bg: 'rgba(99, 102, 241, 0.6)',  border: 'rgb(99, 102, 241)' },
+            'classify': { bg: 'rgba(16, 185, 129, 0.6)',  border: 'rgb(16, 185, 129)' }
+        };
+        var labels = { 'ocr': 'OCR', 'embed': 'Embedding', 'classify': 'Classification' };
+        var datasets = [];
+        ['ocr', 'embed', 'classify'].forEach(function(phase) {
+            if (!byPhase[phase]) return;
+            var c = colors[phase] || { bg: 'rgba(156,163,175,0.6)', border: 'rgb(156,163,175)' };
+            datasets.push({
+                label: labels[phase] || phase,
+                data: daySet.map(function(d) { return byPhase[phase][d] || null; }),
+                borderColor: c.border,
+                backgroundColor: c.bg,
+                borderWidth: 2,
+                tension: 0.3,
+                pointRadius: 3,
+                spanGaps: true
+            });
+        });
+        new Chart(document.getElementById('durationChart'), {
+            type: 'line',
+            data: { labels: daySet, datasets: datasets },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    y: { beginAtZero: true, title: { display: true, text: 'Seconds / doc' } }
+                }
+            }
+        });
+    })();
+    </script>
+    {% else %}
+    <p class="text-sm text-gray-400">No timing data yet</p>
+    {% endif %}
+</div>
 
 <!-- Confidence Distribution -->
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
@@ -139,6 +226,56 @@
         </script>
         {% else %}
         <p class="text-sm text-gray-400">No commits in the last 7 days</p>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- Error rate by phase + Auto-commit rate -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Error Rate by Phase (30 days)</h2>
+        {% if phase_errors %}
+        <div class="space-y-3">
+            {% for phase_key, phase_label in [('ocr', 'OCR Correction'), ('embed', 'Embedding'), ('classify', 'Classification')] %}
+            {% if phase_key in phase_errors %}
+            {% set pe = phase_errors[phase_key] %}
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="font-medium text-gray-700">{{ phase_label }}</span>
+                    <span class="text-gray-500">{{ pe.errors }}/{{ pe.total }} failed ({{ pe.rate_pct }}%)</span>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-2.5">
+                    <div class="h-2.5 rounded-full {{ 'bg-red-500' if pe.rate_pct > 10 else 'bg-amber-400' if pe.rate_pct > 0 else 'bg-green-500' }}"
+                         style="width: {{ [pe.rate_pct, 100] | min }}%"></div>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">No data yet</p>
+        {% endif %}
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-700 mb-4">Auto-Commit Rate</h2>
+        {% if total_commits > 0 %}
+        {% set auto_pct = (auto_commits / total_commits * 100) | round(1) %}
+        <div class="flex items-baseline gap-2 mb-3">
+            <span class="text-3xl font-bold text-gray-900">{{ auto_pct }}%</span>
+            <span class="text-sm text-gray-500">auto-committed</span>
+        </div>
+        <div class="w-full bg-gray-100 rounded-full h-2.5 mb-2">
+            <div class="h-2.5 rounded-full bg-green-500" style="width: {{ auto_pct }}%"></div>
+        </div>
+        <p class="text-xs text-gray-400">
+            {{ auto_commits }} auto / {{ total_commits - auto_commits }} manual
+            ({{ total_commits }} total)
+        </p>
+        {% else %}
+        <p class="text-sm text-gray-400">No commits yet</p>
         {% endif %}
     </div>
 

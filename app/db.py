@@ -151,6 +151,35 @@ CREATE TABLE IF NOT EXISTS audit_log (
     actor       TEXT,
     details     TEXT
 );
+
+-- =========================================================================
+-- Poll cycle summaries (one row per poll_inbox() invocation)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS poll_cycles (
+    id           TEXT PRIMARY KEY,
+    started_at   TEXT NOT NULL,
+    finished_at  TEXT,
+    total_docs   INTEGER NOT NULL DEFAULT 0,
+    succeeded    INTEGER NOT NULL DEFAULT 0,
+    failed       INTEGER NOT NULL DEFAULT 0,
+    skipped      INTEGER NOT NULL DEFAULT 0
+);
+
+-- =========================================================================
+-- Per-document per-phase timing
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS phase_timing (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    poll_cycle_id TEXT NOT NULL,
+    document_id   INTEGER NOT NULL,
+    phase         TEXT NOT NULL,
+    started_at    TEXT NOT NULL,
+    finished_at   TEXT NOT NULL,
+    duration_ms   INTEGER NOT NULL,
+    success       INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_pt_phase ON phase_timing(phase);
+CREATE INDEX IF NOT EXISTS idx_pt_cycle ON phase_timing(poll_cycle_id);
 """
 
 

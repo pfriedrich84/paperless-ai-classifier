@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
@@ -54,6 +56,8 @@ class PollProgress:
     phase: str = ""  # "prepare", "ocr", "embed", "classify"
     cancelled: bool = False
     error: str | None = None
+    started_at: str | None = None  # ISO timestamp when this poll started
+    cycle_id: str | None = None  # links to poll_cycles table
 
 
 _poll_progress = PollProgress()
@@ -118,6 +122,8 @@ def start_poll_task() -> bool:
     _poll_progress.phase = "prepare"
     _poll_progress.cancelled = False
     _poll_progress.error = None
+    _poll_progress.started_at = datetime.now(tz=UTC).isoformat()
+    _poll_progress.cycle_id = None
 
     async def _run() -> None:
         try:
@@ -444,12 +450,39 @@ async def _process_document(
 
 
 # ---------------------------------------------------------------------------
+# Phase timing
+# ---------------------------------------------------------------------------
+def _record_timing(
+    cycle_id: str,
+    doc_id: int,
+    phase: str,
+    start_mono: float,
+    *,
+    success: bool = True,
+) -> None:
+    """Record phase timing for a single document."""
+    duration_ms = int((time.monotonic() - start_mono) * 1000)
+    now = datetime.now(tz=UTC).isoformat()
+    try:
+        with get_conn() as conn:
+            conn.execute(
+                """INSERT INTO phase_timing
+                   (poll_cycle_id, document_id, phase, started_at, finished_at, duration_ms, success)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (cycle_id, doc_id, phase, now, now, duration_ms, 1 if success else 0),
+            )
+    except Exception as exc:
+        log.warning("failed to record timing", doc_id=doc_id, phase=phase, error=str(exc))
+
+
+# ---------------------------------------------------------------------------
 # Phased pipeline for batched processing
 # ---------------------------------------------------------------------------
 async def _phase_ocr(
     docs: list[PaperlessDocument],
     ollama: OllamaClient,
     paperless: PaperlessClient,
+    cycle_id: str,
 ) -> list[PaperlessDocument]:
     """Phase 1: Run OCR correction on all documents.
 
@@ -467,13 +500,17 @@ async def _phase_ocr(
             log.info("poll cancelled during OCR phase")
             corrected.append(doc)
             continue
+        t0 = time.monotonic()
+        ok = True
         try:
             text, num_corrections = await maybe_correct_ocr(doc, ollama, paperless)
             if num_corrections > 0:
                 doc = doc.model_copy(update={"content": text})
                 cache_ocr_correction(doc.id, text, ocr_mode, num_corrections)
         except Exception as exc:
+            ok = False
             log.warning("ocr correction failed", doc_id=doc.id, error=str(exc))
+        _record_timing(cycle_id, doc.id, "ocr", t0, success=ok)
         corrected.append(doc)
 
     # Unload the OCR model from VRAM if we used a separate one
@@ -486,6 +523,7 @@ async def _phase_embed(
     docs: list[PaperlessDocument],
     paperless: PaperlessClient,
     ollama: OllamaClient,
+    cycle_id: str,
 ) -> dict[int, _EmbeddingResult]:
     """Phase 2: Compute embeddings and find similar documents (embed model).
 
@@ -499,7 +537,9 @@ async def _phase_embed(
         if _poll_progress.cancelled:
             log.info("poll cancelled during embed phase")
             break
+        t0 = time.monotonic()
         er = _EmbeddingResult()
+        ok = True
         summary = context_builder.document_summary(doc)
         if summary.strip():
             try:
@@ -509,7 +549,9 @@ async def _phase_embed(
                     doc, vec, paperless
                 )
             except Exception as exc:
+                ok = False
                 log.warning("embedding failed", doc_id=doc.id, error=str(exc))
+        _record_timing(cycle_id, doc.id, "embed", t0, success=ok)
         results[doc.id] = er
 
     await ollama.unload_model(ollama.embed_model)
@@ -525,6 +567,7 @@ async def _phase_classify(
     doctypes: list[PaperlessEntity],
     storage_paths: list[PaperlessEntity],
     tags: list[PaperlessEntity],
+    cycle_id: str,
 ) -> tuple[int, int, int]:
     """Phase 3: Classify all documents and post-process (chat model + DB writes).
 
@@ -542,6 +585,7 @@ async def _phase_classify(
         er = embed_results.get(doc.id, _EmbeddingResult())
         context_docs = [r.document for r in er.similar_results]
 
+        t0 = time.monotonic()
         try:
             result, raw_response = await classifier.classify(
                 doc,
@@ -595,11 +639,13 @@ async def _phase_classify(
             else:
                 classified += 1
             _poll_progress.succeeded += 1
+            _record_timing(cycle_id, doc.id, "classify", t0, success=True)
         except Exception as exc:
             errored += 1
             _poll_progress.failed += 1
             log.error("classification failed", doc_id=doc.id, error=str(exc))
             _write_error("classify", doc.id, exc)
+            _record_timing(cycle_id, doc.id, "classify", t0, success=False)
         finally:
             _poll_progress.done += 1
 
@@ -688,19 +734,28 @@ async def poll_inbox() -> None:
         )
         return
 
+    # Generate a cycle ID for timing records
+    cycle_id = uuid.uuid4().hex[:16]
+    _poll_progress.cycle_id = cycle_id
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO poll_cycles (id, started_at, total_docs, skipped) VALUES (?, datetime('now'), ?, ?)",
+            (cycle_id, len(batch), skipped),
+        )
+
     # --- Phase 1: OCR correction (optional, mode-dependent) ---
     _poll_progress.phase = "ocr"
     if _poll_progress.cancelled:
         log.info("poll cancelled before OCR phase")
         return
-    batch = await _phase_ocr(batch, _ollama, _paperless)
+    batch = await _phase_ocr(batch, _ollama, _paperless, cycle_id)
 
     # --- Phase 2: Embedding + context search (embed model) ---
     _poll_progress.phase = "embed"
     if _poll_progress.cancelled:
         log.info("poll cancelled before embed phase")
         return
-    embed_results = await _phase_embed(batch, _paperless, _ollama)
+    embed_results = await _phase_embed(batch, _paperless, _ollama, cycle_id)
 
     # --- Phase 3: Classification + post-processing (chat model) ---
     _poll_progress.phase = "classify"
@@ -716,7 +771,15 @@ async def poll_inbox() -> None:
         doctypes,
         storage_paths,
         tags,
+        cycle_id,
     )
+
+    # Finalize the poll cycle record
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE poll_cycles SET finished_at = datetime('now'), succeeded = ?, failed = ? WHERE id = ?",
+            (classified + auto_committed, errored, cycle_id),
+        )
 
     log.info(
         "poll cycle complete",

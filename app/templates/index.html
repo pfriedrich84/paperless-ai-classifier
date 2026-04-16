@@ -7,6 +7,13 @@
     <p class="mt-1 text-sm text-gray-500">Overview of your classification pipeline</p>
 </div>
 
+<!-- Pipeline Status (HTMX live-updating) -->
+<div id="pipeline-status"
+     hx-get="/pipeline-status"
+     hx-trigger="load, every 10s"
+     hx-swap="outerHTML">
+</div>
+
 <!-- KPI Cards -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
 
