@@ -515,7 +515,7 @@ async def _phase_ocr(
 
     # Unload the OCR model from VRAM if we used a separate one
     if ocr_mode == "text":
-        await ollama.unload_model(ollama.ocr_model)
+        await ollama.unload_model(ollama.ocr_model, swap=True)
     return corrected
 
 
@@ -554,7 +554,7 @@ async def _phase_embed(
         _record_timing(cycle_id, doc.id, "embed", t0, success=ok)
         results[doc.id] = er
 
-    await ollama.unload_model(ollama.embed_model)
+    await ollama.unload_model(ollama.embed_model, swap=True)
     return results
 
 

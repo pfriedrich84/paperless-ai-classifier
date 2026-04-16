@@ -66,8 +66,14 @@ class OllamaClient:
             log.warning("ollama ping failed", error=str(exc))
             return False
 
-    async def unload_model(self, model: str) -> None:
-        """Unload a model from VRAM via keep_alive=0."""
+    async def unload_model(self, model: str, *, swap: bool = False) -> None:
+        """Unload a model from VRAM via keep_alive=0.
+
+        When *swap* is True, wait ``ollama_model_swap_delay`` seconds after
+        unloading so the GPU can fully free memory before the next model loads.
+        Terminal cleanup calls should leave *swap* as False to avoid needless
+        latency.
+        """
         try:
             await self._client.post(
                 "/api/generate",
@@ -76,6 +82,14 @@ class OllamaClient:
             log.info("model unloaded", model=model)
         except Exception as exc:
             log.warning("failed to unload model", model=model, error=str(exc))
+        # Give the GPU time to fully free memory before loading the next model.
+        # Without this delay, Ollama's GPU discovery may timeout and use stale
+        # VRAM readings, leading to suboptimal GPU/CPU weight distribution.
+        if swap:
+            delay = settings.ollama_model_swap_delay
+            if delay > 0:
+                log.debug("waiting for GPU memory recovery", delay_s=delay)
+                await asyncio.sleep(delay)
 
     async def model_available(self, name: str) -> bool:
         try:

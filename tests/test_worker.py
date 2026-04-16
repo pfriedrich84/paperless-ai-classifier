@@ -345,7 +345,7 @@ class TestPhaseEmbed:
         mock_ollama.unload_model = AsyncMock()
         await _phase_embed([_make_doc(1)], AsyncMock(), mock_ollama, "test_cycle")
 
-        mock_ollama.unload_model.assert_called_once_with("nomic-embed-text-v2-moe")
+        mock_ollama.unload_model.assert_called_once_with("nomic-embed-text-v2-moe", swap=True)
 
 
 class TestPhaseOcr:
@@ -369,7 +369,7 @@ class TestPhaseOcr:
             result = await _phase_ocr([doc], mock_ollama, mock_paperless, "test_cycle")
 
         assert result[0].content == "fixed text"
-        mock_ollama.unload_model.assert_called_once_with("qwen3:0.6b")
+        mock_ollama.unload_model.assert_called_once_with("qwen3:0.6b", swap=True)
 
     @pytest.mark.asyncio
     async def test_ocr_skipped_when_disabled(self):

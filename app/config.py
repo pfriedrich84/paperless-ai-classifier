@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     ollama_num_ctx: int = 16384
     ollama_embed_num_ctx: int = 8192
     ollama_ocr_num_ctx: int = 16384
+    ollama_model_swap_delay: float = 5.0  # seconds to wait after unloading a model
 
     # --- OCR ---
     ocr_mode: str = "off"  # off | text | vision_light | vision_full
@@ -227,6 +228,14 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "number",
         restart="component",
         help="HTTP timeout for Ollama requests",
+    ),
+    "ollama_model_swap_delay": _fm(
+        "Ollama",
+        "Model Swap Delay (seconds)",
+        "number",
+        help="Seconds to wait after unloading a model before loading the next one. "
+        "Gives the GPU time to free memory so Ollama detects correct VRAM. "
+        "Set to 0 to disable.",
     ),
     # --- Phase 1: OCR ---
     "ocr_mode": _fm(
