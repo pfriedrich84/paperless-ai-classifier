@@ -183,10 +183,10 @@ async def reindex_all(
 
             # Unload OCR/vision model before embedding phase
             if ocr_mode == "text":
-                await ollama.unload_model(ollama.ocr_model)
+                await ollama.unload_model(ollama.ocr_model, swap=True)
             else:
                 vision_model = settings.ocr_vision_model or ollama.model
-                await ollama.unload_model(vision_model)
+                await ollama.unload_model(vision_model, swap=True)
 
         # --- Phase 1: Embedding (uses cached OCR text if available) ---
         result = await initial_index(paperless, ollama)
