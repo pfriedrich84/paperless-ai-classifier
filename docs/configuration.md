@@ -26,6 +26,8 @@ in `config.env` persistiert.
 |---|---|---|
 | `OLLAMA_URL` | `http://ollama:11434` | Ollama-Endpoint |
 | `OLLAMA_TIMEOUT_SECONDS` | `300` | HTTP-Timeout fuer Ollama-Requests (Sekunden) |
+| `OLLAMA_CHAT_RETRIES` | `1` | Max. Retries fuer Chat/OCR/Klassifikation bei transienten Fehlern (429/5xx/Timeouts) |
+| `OLLAMA_CHAT_RETRY_BASE_DELAY` | `1.0` | Basis-Delay in Sekunden fuer exponentiellen Chat-Backoff |
 
 ## Phase 1: OCR-Korrektur
 

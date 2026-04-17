@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: int = 300
     ollama_embed_retries: int = 3
     ollama_embed_retry_base_delay: float = 1.0
+    ollama_chat_retries: int = 1
+    ollama_chat_retry_base_delay: float = 1.0
     ollama_num_ctx: int = 16384
     ollama_embed_num_ctx: int = 8192
     ollama_ocr_num_ctx: int = 16384
@@ -322,6 +324,18 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "Context Window (tokens)",
         "number",
         help="num_ctx for the classification model",
+    ),
+    "ollama_chat_retries": _fm(
+        "Phase 3: Klassifikation",
+        "Retries",
+        "number",
+        help="Max retries for chat/classification/OCR requests on transient errors",
+    ),
+    "ollama_chat_retry_base_delay": _fm(
+        "Phase 3: Klassifikation",
+        "Retry Base Delay (seconds)",
+        "number",
+        help="Base delay for exponential backoff on transient chat errors",
     ),
     "max_doc_chars": _fm(
         "Phase 3: Klassifikation",

@@ -194,6 +194,18 @@ async def test_embed_retry_disabled_when_zero(client: OllamaClient):
     assert client._client.post.call_count == 1
 
 
+async def test_embed_raises_on_unexpected_dimension(client: OllamaClient):
+    """Embedding vectors with unexpected dimension should fail fast."""
+    client._client.post = AsyncMock(return_value=_make_response(200, {"embedding": [0.1] * 10}))
+
+    with patch("app.clients.ollama.settings") as mock_settings:
+        mock_settings.ollama_embed_retries = 0
+        mock_settings.ollama_embed_retry_base_delay = 0.01
+        mock_settings.ollama_embed_num_ctx = 8192
+        with pytest.raises(ValueError, match="Unexpected embedding dimension"):
+            await client.embed("hello world")
+
+
 # ---------------------------------------------------------------------------
 # chat_json — markdown fence stripping + num_ctx
 # ---------------------------------------------------------------------------
@@ -296,6 +308,53 @@ async def test_chat_json_passes_custom_num_ctx(client: OllamaClient):
     assert sent_payload["options"]["num_ctx"] == 131072
 
 
+async def test_chat_json_retries_on_transient_500(client: OllamaClient):
+    """chat_json retries once on transient 500 and then succeeds."""
+    payload = {"title": "Recovered", "confidence": 80}
+    client._client.post = AsyncMock(
+        side_effect=[
+            _make_response(500, text='{"error": "internal error"}'),
+            _make_chat_response(json.dumps(payload)),
+        ]
+    )
+
+    with (
+        patch("app.clients.ollama.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        patch("app.clients.ollama.settings") as mock_settings,
+    ):
+        mock_settings.ollama_num_ctx = 4096
+        mock_settings.ollama_chat_retries = 1
+        mock_settings.ollama_chat_retry_base_delay = 0.01
+        result = await client.chat_json(system="sys", user="usr")
+
+    assert result == payload
+    assert client._client.post.call_count == 2
+    mock_sleep.assert_called_once()
+
+
+async def test_chat_retries_on_connect_error(client: OllamaClient):
+    """Plain chat retries on transient transport errors."""
+    client._client.post = AsyncMock(
+        side_effect=[
+            httpx.ConnectError("connection refused"),
+            _make_chat_response("ok"),
+        ]
+    )
+
+    with (
+        patch("app.clients.ollama.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        patch("app.clients.ollama.settings") as mock_settings,
+    ):
+        mock_settings.ollama_num_ctx = 4096
+        mock_settings.ollama_chat_retries = 1
+        mock_settings.ollama_chat_retry_base_delay = 0.01
+        result = await client.chat(messages=[{"role": "user", "content": "hi"}])
+
+    assert result == "ok"
+    assert client._client.post.call_count == 2
+    mock_sleep.assert_called_once()
+
+
 async def test_chat_vision_json_passes_default_num_ctx(client: OllamaClient):
     """Vision chat uses settings.ollama_num_ctx when no override is given."""
     payload = {"ok": True}
@@ -325,6 +384,13 @@ async def test_chat_vision_json_passes_custom_num_ctx(client: OllamaClient):
 # ---------------------------------------------------------------------------
 # unload_model — model swap delay
 # ---------------------------------------------------------------------------
+async def test_is_retryable_covers_additional_transport_errors(client: OllamaClient):
+    """Retryability includes Pool/Write timeouts and protocol/read-write errors."""
+    assert client._is_retryable(httpx.PoolTimeout("pool timeout"))
+    assert client._is_retryable(httpx.WriteTimeout("write timeout"))
+    assert client._is_retryable(httpx.RemoteProtocolError("bad protocol"))
+
+
 async def test_unload_model_sleeps_for_swap_delay(client: OllamaClient):
     """unload_model(swap=True) waits for the configured swap delay."""
     client._client.post = AsyncMock(

@@ -127,24 +127,18 @@ class OllamaClient:
                 {"role": "user", "content": user},
             ],
         }
-        r = await self._client.post("/api/chat", json=payload)
-        r.raise_for_status()
-        data = r.json()
+        retries = getattr(settings, "ollama_chat_retries", 1)
+        base_delay = getattr(settings, "ollama_chat_retry_base_delay", 1.0)
+        data = await self._post_chat_with_retry(
+            payload,
+            retry_count=retries,
+            base_delay=base_delay,
+            log_label="ollama chat",
+        )
         content = data.get("message", {}).get("content", "")
         if not content:
             raise ValueError("Ollama returned empty content")
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            # Some models wrap JSON in markdown fences despite format="json"
-            stripped = _strip_markdown_fences(content)
-            if stripped != content:
-                try:
-                    return json.loads(stripped)
-                except json.JSONDecodeError:
-                    pass
-            log.error("ollama returned invalid json", content=content[:500])
-            raise ValueError(f"Invalid JSON from Ollama: {content[:200]}") from None
+        return self._parse_json_content(content, source="Ollama")
 
     # ---------------------------------------------------------------
     # Chat with vision (JSON mode)
@@ -176,23 +170,18 @@ class OllamaClient:
                 {"role": "user", "content": user, "images": images},
             ],
         }
-        r = await self._client.post("/api/chat", json=payload)
-        r.raise_for_status()
-        data = r.json()
+        retries = getattr(settings, "ollama_chat_retries", 1)
+        base_delay = getattr(settings, "ollama_chat_retry_base_delay", 1.0)
+        data = await self._post_chat_with_retry(
+            payload,
+            retry_count=retries,
+            base_delay=base_delay,
+            log_label="ollama vision chat",
+        )
         content = data.get("message", {}).get("content", "")
         if not content:
             raise ValueError("Ollama returned empty content")
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            stripped = _strip_markdown_fences(content)
-            if stripped != content:
-                try:
-                    return json.loads(stripped)
-                except json.JSONDecodeError:
-                    pass
-            log.error("ollama vision returned invalid json", content=content[:500])
-            raise ValueError(f"Invalid JSON from Ollama vision: {content[:200]}") from None
+        return self._parse_json_content(content, source="Ollama vision")
 
     # ---------------------------------------------------------------
     # Chat (plain text, for conversational RAG)
@@ -219,9 +208,14 @@ class OllamaClient:
             "options": {"temperature": temperature, "num_ctx": settings.ollama_num_ctx},
             "messages": messages,
         }
-        r = await self._client.post("/api/chat", json=payload)
-        r.raise_for_status()
-        data = r.json()
+        retries = getattr(settings, "ollama_chat_retries", 1)
+        base_delay = getattr(settings, "ollama_chat_retry_base_delay", 1.0)
+        data = await self._post_chat_with_retry(
+            payload,
+            retry_count=retries,
+            base_delay=base_delay,
+            log_label="ollama plain chat",
+        )
         content = data.get("message", {}).get("content", "")
         if not content:
             raise ValueError("Ollama returned empty content")
@@ -244,7 +238,66 @@ class OllamaClient:
         if isinstance(exc, httpx.HTTPStatusError):
             code = exc.response.status_code
             return code == 429 or code >= 500
-        return isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout))
+        return isinstance(
+            exc,
+            (
+                httpx.ConnectError,
+                httpx.ConnectTimeout,
+                httpx.ReadTimeout,
+                httpx.WriteTimeout,
+                httpx.PoolTimeout,
+                httpx.RemoteProtocolError,
+                httpx.ReadError,
+                httpx.WriteError,
+            ),
+        )
+
+    @staticmethod
+    def _backoff_delay(base_delay: float, attempt: int) -> float:
+        """Exponential backoff with jitter for retry attempt ``attempt``."""
+        return base_delay * (2**attempt) + random.uniform(0, 0.5)
+
+    async def _post_chat_with_retry(
+        self,
+        payload: dict[str, Any],
+        *,
+        retry_count: int,
+        base_delay: float,
+        log_label: str,
+    ) -> dict[str, Any]:
+        """POST /api/chat with retry handling for transient errors."""
+        for attempt in range(1 + retry_count):
+            try:
+                r = await self._client.post("/api/chat", json=payload)
+                r.raise_for_status()
+                return r.json()
+            except Exception as exc:
+                if attempt < retry_count and self._is_retryable(exc):
+                    delay = self._backoff_delay(base_delay, attempt)
+                    log.warning(
+                        f"{log_label} request failed, retrying",
+                        attempt=attempt + 1,
+                        delay_s=round(delay, 2),
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise
+
+    @staticmethod
+    def _parse_json_content(content: str, *, source: str) -> dict[str, Any]:
+        """Parse JSON content, handling occasional markdown fence wrappers."""
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            stripped = _strip_markdown_fences(content)
+            if stripped != content:
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError:
+                    pass
+            log.error(f"{source} returned invalid json", content=content[:500])
+            raise ValueError(f"Invalid JSON from {source}: {content[:200]}") from None
 
     async def embed(self, text: str) -> list[float]:
         max_retries = settings.ollama_embed_retries
@@ -265,6 +318,11 @@ class OllamaClient:
                 vec = data.get("embedding")
                 if not vec:
                     raise ValueError("Ollama returned empty embedding")
+                expected_dim = 1024
+                if len(vec) != expected_dim:
+                    raise ValueError(
+                        f"Unexpected embedding dimension: got {len(vec)}, expected {expected_dim}"
+                    )
                 return vec
             except httpx.HTTPStatusError as exc:
                 last_exc = exc
@@ -281,7 +339,7 @@ class OllamaClient:
                     )
                     continue
                 if attempt < max_retries and self._is_retryable(exc):
-                    delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
+                    delay = self._backoff_delay(base_delay, attempt)
                     self.embed_retry_count += 1
                     log.warning(
                         "embedding request failed, retrying",
@@ -295,7 +353,7 @@ class OllamaClient:
             except Exception as exc:
                 last_exc = exc
                 if attempt < max_retries and self._is_retryable(exc):
-                    delay = base_delay * (2**attempt) + random.uniform(0, 0.5)
+                    delay = self._backoff_delay(base_delay, attempt)
                     self.embed_retry_count += 1
                     log.warning(
                         "embedding request failed, retrying",
