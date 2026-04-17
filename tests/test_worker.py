@@ -191,6 +191,7 @@ class TestBlacklistFiltering:
         assert rows[0]["name"] == "Steuer"
         assert rows[0]["times_seen"] == 2
 
+
 class TestProcessDocumentReturn:
     """Verify _process_document returns the correct ProcessResult."""
 

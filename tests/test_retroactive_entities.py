@@ -23,7 +23,9 @@ async def test_retroactive_correspondent_case_insensitive(mock_paperless, patch_
     conn.commit()
     conn.close()
 
-    mock_paperless.get_document.return_value = PaperlessDocument(id=42, title="Test", correspondent=20)
+    mock_paperless.get_document.return_value = PaperlessDocument(
+        id=42, title="Test", correspondent=20
+    )
 
     patched, pending = await retroactive_correspondent_apply("TK", 50, mock_paperless)
 
@@ -45,7 +47,9 @@ async def test_retroactive_doctype_case_insensitive(mock_paperless, patch_db, tm
     conn.commit()
     conn.close()
 
-    mock_paperless.get_document.return_value = PaperlessDocument(id=42, title="Test", document_type=10)
+    mock_paperless.get_document.return_value = PaperlessDocument(
+        id=42, title="Test", document_type=10
+    )
 
     patched, pending = await retroactive_doctype_apply("Rechnung", 77, mock_paperless)
 

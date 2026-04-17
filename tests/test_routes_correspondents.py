@@ -250,9 +250,7 @@ class TestCorrespondentWhitelistUpsert:
 
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
-        conn.execute(
-            "INSERT INTO correspondent_whitelist (name, times_seen) VALUES ('TK', 1)"
-        )
+        conn.execute("INSERT INTO correspondent_whitelist (name, times_seen) VALUES ('TK', 1)")
         conn.commit()
         conn.close()
 
