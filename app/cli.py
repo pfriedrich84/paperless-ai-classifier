@@ -8,6 +8,8 @@ Usage::
     python -m app.cli reindex-embed    # Embedding only (skip OCR)
     python -m app.cli poll             # Process inbox (OCR + embed + classify)
     python -m app.cli poll --force     # Reprocess inbox docs (ignore idempotency skip)
+    python -m app.cli process-doc 224  # Process one document by ID
+    python -m app.cli process-doc 224 --force  # Reprocess one document
     python -m app.cli reset --yes      # Delete DB and recreate clean schema
     python -m app.cli reset --yes --include-config  # Also delete config.env
 """
@@ -146,6 +148,39 @@ async def cmd_poll(*, force: bool = False) -> None:
         await ollama.aclose()
 
 
+async def cmd_process_doc(document_id: int, *, force: bool = False) -> None:
+    """Process exactly one document by ID (OCR + embed + classify)."""
+    from app.db import get_conn
+    from app.worker import _process_document
+
+    paperless = PaperlessClient()
+    ollama = OllamaClient()
+    try:
+        doc = await paperless.get_document(document_id)
+        correspondents = await paperless.list_correspondents()
+        doctypes = await paperless.list_document_types()
+        storage_paths = await paperless.list_storage_paths()
+        tags = await paperless.list_tags()
+
+        if force:
+            with get_conn() as conn:
+                conn.execute("DELETE FROM processed_documents WHERE document_id = ?", (document_id,))
+
+        result = await _process_document(
+            doc,
+            paperless,
+            ollama,
+            correspondents,
+            doctypes,
+            storage_paths,
+            tags,
+        )
+        print(f"Document #{document_id} processing complete: {result}")
+    finally:
+        await paperless.aclose()
+        await ollama.aclose()
+
+
 def cmd_reset(include_config: bool = False) -> None:
     """Delete all persistent state and recreate a clean database."""
     log = structlog.get_logger("reset")
@@ -187,6 +222,7 @@ COMMANDS = {
     "reindex-ocr": ("OCR correction only (--force to ignore cache)", cmd_reindex_ocr),
     "reindex-embed": ("Rebuild embeddings only", cmd_reindex_embed),
     "poll": ("Process inbox (OCR + embed + classify, --force to reprocess)", cmd_poll),
+    "process-doc": ("Process a single document by ID (optional --force)", cmd_process_doc),
     "reset": ("Delete all state and recreate empty DB (--yes required)", None),
 }
 
@@ -227,6 +263,17 @@ def main() -> None:
     try:
         if cmd_name in {"reindex-ocr", "poll"}:
             asyncio.run(cmd_func(force=force))
+        elif cmd_name == "process-doc":
+            doc_arg = next((a for a in extra_args if not a.startswith("-")), None)
+            if doc_arg is None:
+                print("Usage: archibot process-doc <document_id> [--force]")
+                sys.exit(1)
+            try:
+                document_id = int(doc_arg)
+            except ValueError:
+                print(f"Invalid document_id: {doc_arg}")
+                sys.exit(1)
+            asyncio.run(cmd_func(document_id, force=force))
         else:
             asyncio.run(cmd_func())
     except KeyboardInterrupt:

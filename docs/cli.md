@@ -113,6 +113,29 @@ naechsten automatischen Poll warten will.
 
 ---
 
+### `process-doc` — Einzelnes Dokument verarbeiten
+
+Fuehrt die komplette Pipeline fuer genau ein Dokument aus (OCR-Korrektur,
+Embedding, Klassifikation, Vorschlag speichern / Auto-Commit nach Konfiguration).
+
+```bash
+# Ein Dokument verarbeiten
+archibot process-doc 224
+
+# Dokument erneut verarbeiten (Idempotency-Skip ignorieren)
+archibot process-doc 224 --force
+```
+
+**Flags:**
+| Flag | Beschreibung |
+|------|-------------|
+| `--force` | Loescht den bestehenden Eintrag in `processed_documents` fuer diese Dokument-ID und erzwingt dadurch eine Neuverarbeitung. |
+
+**Wann nutzen:** Ideal fuer Debugging einzelner Faelle (z. B. fehlerhafte
+Klassifikation oder Ollama-Probleme), ohne die gesamte Inbox zu starten.
+
+---
+
 ### `reset` — Container zuruecksetzen
 
 Loescht die gesamte Datenbank (Vorschlaege, Embeddings, OCR-Cache, Fehler,

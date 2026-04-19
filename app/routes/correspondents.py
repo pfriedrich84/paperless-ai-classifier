@@ -31,7 +31,7 @@ async def correspondent_list(request: Request):
     )
 
 
-@router.post("/{name}/approve")
+@router.post("/{name:path}/approve")
 async def approve_correspondent(request: Request, name: str):
     paperless = request.app.state.paperless
     try:
@@ -76,7 +76,7 @@ async def approve_correspondent(request: Request, name: str):
         )
 
 
-@router.post("/{name}/reject")
+@router.post("/{name:path}/reject")
 async def reject_correspondent(request: Request, name: str):
     with get_conn() as conn:
         row = conn.execute(
@@ -99,7 +99,7 @@ async def reject_correspondent(request: Request, name: str):
     return HTMLResponse("")
 
 
-@router.post("/{name}/unblacklist")
+@router.post("/{name:path}/unblacklist")
 async def unblacklist_correspondent(request: Request, name: str):
     with get_conn() as conn:
         conn.execute("DELETE FROM correspondent_blacklist WHERE name = ?", (name,))

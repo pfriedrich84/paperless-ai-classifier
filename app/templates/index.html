@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — ArchiBot{% endblock %}
+{% block title %}Übersicht — ArchiBot{% endblock %}
 
 {% block content %}
 <div class="mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-    <p class="mt-1 text-sm text-gray-500">Overview of your classification pipeline</p>
+    <h1 class="text-2xl font-bold text-gray-900">Übersicht</h1>
+    <p class="mt-1 text-sm text-gray-500">Überblick über deine Klassifizierungs-Pipeline</p>
 </div>
 
 <!-- Pipeline Status (HTMX live-updating) -->
@@ -21,7 +21,7 @@
     <a href="/review" class="block bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-sm font-medium text-gray-500">Pending Review</p>
+                <p class="text-sm font-medium text-gray-500">Offene Prüfungen</p>
                 <p class="mt-2 text-3xl font-bold text-amber-600">{{ pending }}</p>
             </div>
             <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
@@ -37,7 +37,7 @@
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-sm font-medium text-gray-500">Committed Today</p>
+                <p class="text-sm font-medium text-gray-500">Heute übernommen</p>
                 <p class="mt-2 text-3xl font-bold text-green-600">{{ committed_today }}</p>
             </div>
             <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
@@ -53,7 +53,7 @@
     <a href="/errors" class="block bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-sm font-medium text-gray-500">Errors (24h)</p>
+                <p class="text-sm font-medium text-gray-500">Fehler (24h)</p>
                 <p class="mt-2 text-3xl font-bold {{ 'text-red-600' if error_count > 0 else 'text-gray-400' }}">{{ error_count }}</p>
             </div>
             <div class="w-12 h-12 rounded-full {{ 'bg-red-100' if error_count > 0 else 'bg-gray-100' }} flex items-center justify-center">
@@ -69,7 +69,7 @@
     <a href="/tags" class="block bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-sm font-medium text-gray-500">Pending Tags</p>
+                <p class="text-sm font-medium text-gray-500">Offene Tags</p>
                 <p class="mt-2 text-3xl font-bold {{ 'text-primary-600' if pending_tags > 0 else 'text-gray-400' }}">{{ pending_tags }}</p>
             </div>
             <div class="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">

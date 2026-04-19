@@ -92,6 +92,33 @@ class TestCorrespondentRejectMovesToBlacklist:
 
         assert bl["times_seen"] == 5
 
+    def test_reject_handles_slash_in_name(self, client, db_path):
+        """Names containing '/' should still be routed and rejected correctly."""
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "INSERT INTO correspondent_whitelist (name, times_seen) VALUES (?, ?)",
+            ("TK / Die Techniker", 3),
+        )
+        conn.commit()
+        conn.close()
+
+        r = client.post("/correspondents/TK%20%2F%20Die%20Techniker/reject")
+        assert r.status_code == 200
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        wl = conn.execute(
+            "SELECT * FROM correspondent_whitelist WHERE name = ?", ("TK / Die Techniker",)
+        ).fetchone()
+        bl = conn.execute(
+            "SELECT * FROM correspondent_blacklist WHERE name = ?", ("TK / Die Techniker",)
+        ).fetchone()
+        conn.close()
+
+        assert wl is None
+        assert bl is not None
+
     def test_reject_creates_audit_log(self, client, db_path):
         """Rejecting a correspondent should create an audit log entry."""
         conn = sqlite3.connect(str(db_path))
@@ -110,6 +137,35 @@ class TestCorrespondentRejectMovesToBlacklist:
 
         assert log is not None
         assert "AuditCorr" in log["details"]
+
+
+class TestCorrespondentApprove:
+    def test_approve_handles_slash_in_name(self, client, db_path):
+        """Names containing '/' should still be routed and approved correctly."""
+        app.state.paperless.create_correspondent = AsyncMock(return_value=type("E", (), {"id": 123})())
+
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO correspondent_whitelist (name, times_seen) VALUES (?, ?)",
+            ("AOK / Rheinland", 2),
+        )
+        conn.commit()
+        conn.close()
+
+        r = client.post("/correspondents/AOK%20%2F%20Rheinland/approve")
+        assert r.status_code == 200
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        wl = conn.execute(
+            "SELECT approved, paperless_id FROM correspondent_whitelist WHERE name = ?",
+            ("AOK / Rheinland",),
+        ).fetchone()
+        conn.close()
+
+        assert wl is not None
+        assert wl["approved"] == 1
+        assert wl["paperless_id"] == 123
 
 
 class TestCorrespondentUnblacklist:

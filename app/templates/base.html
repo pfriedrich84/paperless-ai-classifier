@@ -29,6 +29,20 @@
 
 <!-- Navigation -->
 <nav class="bg-primary-700 shadow-lg">
+    {% set path = request.url.path %}
+    {% set approvals_section = path.startswith('/approvals') or path.startswith('/tags') or path.startswith('/correspondents') or path.startswith('/doctypes') %}
+    {% set nav = [
+        ('/', 'Übersicht'),
+        ('/chat', 'Chat'),
+        ('/inbox', 'Posteingang'),
+        ('/review', 'Prüfung'),
+        ('/approvals', 'Freigaben'),
+        ('/errors', 'Fehler'),
+        ('/embeddings', 'Vektorindex'),
+        ('/stats', 'Statistiken'),
+        ('/settings', 'Einstellungen')
+    ] %}
+
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
             <div class="flex items-center space-x-8">
@@ -37,11 +51,17 @@
                     <span>ArchiBot</span>
                 </a>
                 <div class="hidden md:flex space-x-1">
-                    {% set nav = {"/": "Dashboard", "/chat": "Chat", "/inbox": "Inbox", "/review": "Review", "/tags": "Tags", "/correspondents": "Korrespondenten", "/doctypes": "Dokumenttypen", "/errors": "Errors", "/embeddings": "Embeddings", "/stats": "Stats", "/settings": "Settings"} %}
-                    {% for href, label in nav.items() %}
+                    {% for href, label in nav %}
+                    {% if href == '/' %}
+                        {% set is_active = (path == '/') %}
+                    {% elif href == '/approvals' %}
+                        {% set is_active = approvals_section %}
+                    {% else %}
+                        {% set is_active = (path == href or path.startswith(href + '/')) %}
+                    {% endif %}
                     <a href="{{ href }}"
                        class="px-3 py-2 rounded-md text-sm font-medium
-                              {% if request.url.path == href or (href != '/' and request.url.path.startswith(href)) %}
+                              {% if is_active %}
                               bg-primary-800 text-white
                               {% else %}
                               text-primary-100 hover:bg-primary-600 hover:text-white
@@ -69,10 +89,17 @@
 
     <!-- Mobile nav (hidden by default, toggled by hamburger) -->
     <div id="mobile-menu" class="md:hidden border-t border-primary-600 px-2 py-2 space-y-1 hidden">
-        {% for href, label in nav.items() %}
+        {% for href, label in nav %}
+        {% if href == '/' %}
+            {% set is_active = (path == '/') %}
+        {% elif href == '/approvals' %}
+            {% set is_active = approvals_section %}
+        {% else %}
+            {% set is_active = (path == href or path.startswith(href + '/')) %}
+        {% endif %}
         <a href="{{ href }}"
            class="block px-3 py-2 rounded-md text-sm font-medium
-                  {% if request.url.path == href or (href != '/' and request.url.path.startswith(href)) %}
+                  {% if is_active %}
                   bg-primary-800 text-white
                   {% else %}
                   text-primary-100 hover:bg-primary-600
@@ -81,6 +108,29 @@
         </a>
         {% endfor %}
     </div>
+
+    {% if approvals_section %}
+    <div class="border-t border-primary-600 bg-primary-800/70">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+            <div class="flex items-center gap-2 overflow-x-auto">
+                {% set approvals_nav = [('/tags', 'Tags'), ('/correspondents', 'Korrespondenten'), ('/doctypes', 'Dokumenttypen')] %}
+                {% for href, label in approvals_nav %}
+                {% set is_sub_active = (path == href or path.startswith(href + '/')) %}
+                <a href="{{ href }}"
+                   class="whitespace-nowrap px-3 py-1.5 rounded-md text-xs font-semibold
+                          {% if is_sub_active %}
+                          bg-white text-primary-700
+                          {% else %}
+                          text-primary-100 hover:bg-primary-600
+                          {% endif %}
+                          transition-colors">
+                    {{ label }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </nav>
 
 <!-- Reindex banner (polls for active reindex) -->

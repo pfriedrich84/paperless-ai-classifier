@@ -262,6 +262,7 @@ async def healthz():
 # Routes (imported after app creation to avoid circular imports)
 # ---------------------------------------------------------------------------
 from app.routes import (  # noqa: E402
+    approvals,
     chat,
     correspondents,
     doctypes,
@@ -283,6 +284,7 @@ app.include_router(index.router)
 app.include_router(chat.router)
 app.include_router(inbox.router)
 app.include_router(review.router)
+app.include_router(approvals.router)
 app.include_router(tags.router)
 app.include_router(correspondents.router)
 app.include_router(doctypes.router)

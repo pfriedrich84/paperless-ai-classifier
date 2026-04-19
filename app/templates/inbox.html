@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Inbox — ArchiBot{% endblock %}
+{% block title %}Posteingang — ArchiBot{% endblock %}
 
 {% block content %}
 <div class="mb-6">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900">Inbox</h1>
-            <p class="mt-1 text-sm text-gray-500">{{ items|length }} document{{ 's' if items|length != 1 else '' }} with Posteingang tag</p>
+            <h1 class="text-2xl font-bold text-gray-900">Posteingang</h1>
+            <p class="mt-1 text-sm text-gray-500">{{ items|length }} Dokument{{ 'e' if items|length != 1 else '' }} mit Posteingang-Tag</p>
         </div>
 
         <!-- Bulk action buttons -->
@@ -18,7 +18,7 @@
                     hx-swap="outerHTML"
                     hx-disabled-elt="this"
                     {% if unprocessed_count > 0 %}
-                    hx-confirm="Process {{ unprocessed_count }} unprocessed inbox document{{ 's' if unprocessed_count != 1 else '' }}?"
+                    hx-confirm="{{ unprocessed_count }} unverarbeitete Posteingangs-Dokument{{ 'e' if unprocessed_count != 1 else '' }} verarbeiten?"
                     {% endif %}
                     {% if unprocessed_count == 0 %}disabled{% endif %}
                     class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg
@@ -27,7 +27,7 @@
                 <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                 </svg>
-                Process Inbox
+                Posteingang verarbeiten
                 {% if unprocessed_count > 0 %}
                 <span class="ml-1.5 bg-primary-500 text-white text-xs px-1.5 py-0.5 rounded-full">{{ unprocessed_count }}</span>
                 {% endif %}
@@ -36,13 +36,13 @@
                     hx-target="#bulk-progress"
                     hx-swap="outerHTML"
                     hx-disabled-elt="this"
-                    hx-confirm="Process ALL documents in Paperless? This may take a long time."
+                    hx-confirm="ALLE Dokumente in Paperless verarbeiten? Das kann lange dauern."
                     class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg
                            bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
                 <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                 </svg>
-                Process All Documents
+                Alle Dokumente verarbeiten
             </button>
         </div>
         {% endif %}
@@ -54,7 +54,7 @@
 <div id="bulk-progress" hx-get="/inbox/bulk-status" hx-trigger="every 2s" hx-swap="outerHTML">
     <div class="mt-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div class="flex justify-between text-sm text-blue-800 mb-2">
-            <span>Processing {{ 'inbox documents' if bulk_progress.mode == 'inbox' else 'all documents' }}...</span>
+            <span>Verarbeite {{ 'Posteingangs-Dokumente' if bulk_progress.mode == 'inbox' else 'alle Dokumente' }}...</span>
             <span>{{ bulk_progress.done }} / {{ bulk_progress.total }}</span>
         </div>
         <div class="w-full bg-blue-200 rounded-full h-2.5">
@@ -71,19 +71,19 @@
 <!-- Status summary -->
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
     <div class="bg-white rounded-lg border border-gray-200 px-4 py-3">
-        <div class="text-xs font-medium text-gray-500 uppercase">Unprocessed</div>
+        <div class="text-xs font-medium text-gray-500 uppercase">Unverarbeitet</div>
         <div class="mt-1 text-xl font-bold text-gray-700">{{ counts.get('unprocessed', 0) }}</div>
     </div>
     <div class="bg-white rounded-lg border border-amber-200 px-4 py-3">
-        <div class="text-xs font-medium text-amber-600 uppercase">Pending Review</div>
+        <div class="text-xs font-medium text-amber-600 uppercase">Offene Prüfung</div>
         <div class="mt-1 text-xl font-bold text-amber-700">{{ counts.get('pending', 0) }}</div>
     </div>
     <div class="bg-white rounded-lg border border-red-200 px-4 py-3">
-        <div class="text-xs font-medium text-red-600 uppercase">Errors</div>
+        <div class="text-xs font-medium text-red-600 uppercase">Fehler</div>
         <div class="mt-1 text-xl font-bold text-red-700">{{ counts.get('error', 0) }}</div>
     </div>
     <div class="bg-white rounded-lg border border-green-200 px-4 py-3">
-        <div class="text-xs font-medium text-green-600 uppercase">Committed</div>
+        <div class="text-xs font-medium text-green-600 uppercase">Übernommen</div>
         <div class="mt-1 text-xl font-bold text-green-700">{{ counts.get('committed', 0) + counts.get('accepted', 0) }}</div>
     </div>
 </div>
@@ -101,8 +101,8 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
               d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
     </svg>
-    <h3 class="mt-4 text-lg font-medium text-gray-900">Inbox empty</h3>
-    <p class="mt-1 text-sm text-gray-500">No documents with the Posteingang tag found.</p>
+    <h3 class="mt-4 text-lg font-medium text-gray-900">Posteingang ist leer</h3>
+    <p class="mt-1 text-sm text-gray-500">Keine Dokumente mit dem Posteingang-Tag gefunden.</p>
 </div>
 {% endif %}
 {% endblock %}

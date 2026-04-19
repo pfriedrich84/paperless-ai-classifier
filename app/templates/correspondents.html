@@ -27,7 +27,7 @@
 <!-- Mobile: card layout -->
 <div class="md:hidden space-y-3">
     {% for c in correspondents %}
-    <div id="corr-m-{{ c.name }}" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+    <div id="corr-m-{{ loop.index0 }}" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div class="flex items-center justify-between mb-2">
             <span class="font-medium text-sm text-gray-900">{{ c.name }}</span>
             {% if c.approved %}
@@ -46,15 +46,15 @@
         </div>
         {% if not c.approved %}
         <div class="mt-3 flex gap-2">
-            <button hx-post="/correspondents/{{ c.name }}/approve"
-                    hx-target="#corr-m-{{ c.name }}"
+            <button hx-post="/correspondents/{{ c.name | urlencode }}/approve"
+                    hx-target="#corr-m-{{ loop.index0 }}"
                     hx-swap="outerHTML"
                     class="flex-1 inline-flex justify-center items-center px-3 py-2 text-sm font-medium rounded-lg
                            bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
                 Approve
             </button>
-            <button hx-post="/correspondents/{{ c.name }}/reject"
-                    hx-target="#corr-m-{{ c.name }}"
+            <button hx-post="/correspondents/{{ c.name | urlencode }}/reject"
+                    hx-target="#corr-m-{{ loop.index0 }}"
                     hx-swap="outerHTML"
                     hx-confirm="Korrespondent '{{ c.name }}' auf Blacklist setzen? Er wird kuenftig vom Classifier ignoriert."
                     class="flex-1 inline-flex justify-center items-center px-3 py-2 text-sm font-medium rounded-lg
@@ -81,7 +81,7 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
             {% for c in correspondents %}
-            <tr id="corr-{{ c.name }}" class="hover:bg-gray-50 transition-colors">
+            <tr id="corr-{{ loop.index0 }}" class="hover:bg-gray-50 transition-colors">
                 <td class="px-4 py-3 font-medium text-sm text-gray-900">{{ c.name }}</td>
                 <td class="px-4 py-3 text-center text-sm text-gray-500">{{ c.paperless_id or '—' }}</td>
                 <td class="px-4 py-3 text-center">
@@ -98,15 +98,15 @@
                 <td class="px-4 py-3 text-center text-sm text-gray-500">{{ c.times_seen }}</td>
                 <td class="px-4 py-3 text-right space-x-2">
                     {% if not c.approved %}
-                    <button hx-post="/correspondents/{{ c.name }}/approve"
-                            hx-target="#corr-{{ c.name }}"
+                    <button hx-post="/correspondents/{{ c.name | urlencode }}/approve"
+                            hx-target="#corr-{{ loop.index0 }}"
                             hx-swap="outerHTML"
                             class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg
                                    bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
                         Approve
                     </button>
-                    <button hx-post="/correspondents/{{ c.name }}/reject"
-                            hx-target="#corr-{{ c.name }}"
+                    <button hx-post="/correspondents/{{ c.name | urlencode }}/reject"
+                            hx-target="#corr-{{ loop.index0 }}"
                             hx-swap="outerHTML"
                             hx-confirm="Korrespondent '{{ c.name }}' auf Blacklist setzen? Er wird kuenftig vom Classifier ignoriert."
                             class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg
@@ -142,7 +142,7 @@
 <!-- Mobile: card layout -->
 <div class="md:hidden space-y-3">
     {% for b in blacklist %}
-    <div id="bl-corr-m-{{ b.name }}" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+    <div id="bl-corr-m-{{ loop.index0 }}" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div class="flex items-center justify-between mb-2">
             <span class="font-medium text-sm text-gray-900">{{ b.name }}</span>
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -154,8 +154,8 @@
             <span>Rejected: {{ b.rejected_at[:10] if b.rejected_at else '—' }}</span>
         </div>
         <div class="mt-3">
-            <button hx-post="/correspondents/{{ b.name }}/unblacklist"
-                    hx-target="#bl-corr-m-{{ b.name }}"
+            <button hx-post="/correspondents/{{ b.name | urlencode }}/unblacklist"
+                    hx-target="#bl-corr-m-{{ loop.index0 }}"
                     hx-swap="outerHTML"
                     hx-confirm="Korrespondent '{{ b.name }}' von der Blacklist entfernen? Er kann dann erneut vorgeschlagen werden."
                     class="w-full inline-flex justify-center items-center px-3 py-2 text-sm font-medium rounded-lg
@@ -180,13 +180,13 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
             {% for b in blacklist %}
-            <tr id="bl-corr-{{ b.name }}" class="hover:bg-gray-50 transition-colors">
+            <tr id="bl-corr-{{ loop.index0 }}" class="hover:bg-gray-50 transition-colors">
                 <td class="px-4 py-3 font-medium text-sm text-gray-900">{{ b.name }}</td>
                 <td class="px-4 py-3 text-center text-sm text-gray-500">{{ b.times_seen }}</td>
                 <td class="px-4 py-3 text-center text-sm text-gray-500">{{ b.rejected_at[:10] if b.rejected_at else '—' }}</td>
                 <td class="px-4 py-3 text-right">
-                    <button hx-post="/correspondents/{{ b.name }}/unblacklist"
-                            hx-target="#bl-corr-{{ b.name }}"
+                    <button hx-post="/correspondents/{{ b.name | urlencode }}/unblacklist"
+                            hx-target="#bl-corr-{{ loop.index0 }}"
                             hx-swap="outerHTML"
                             hx-confirm="Korrespondent '{{ b.name }}' von der Blacklist entfernen? Er kann dann erneut vorgeschlagen werden."
                             class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg

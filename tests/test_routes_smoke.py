@@ -52,9 +52,17 @@ class TestRouteSmoke:
         r = client.get("/review/99999")
         assert r.status_code == 404
 
+    def test_approvals_entry_redirects(self, client):
+        r = client.get("/approvals", follow_redirects=False)
+        assert r.status_code == 302
+        assert r.headers["location"] == "/tags"
+
     def test_tags(self, client):
         r = client.get("/tags")
         assert r.status_code == 200
+        assert "Freigaben" in r.text
+        assert "Korrespondenten" in r.text
+        assert "Dokumenttypen" in r.text
 
     def test_errors(self, client):
         r = client.get("/errors")
