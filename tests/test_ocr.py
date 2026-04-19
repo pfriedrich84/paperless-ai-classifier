@@ -82,7 +82,9 @@ class TestOcrResponseParsing:
         assert num == 0
 
     def test_parse_ocr_response_clamps_negative_corrections(self):
-        text, num = _parse_ocr_response({"corrected_text": "Korrigiert", "num_corrections": -5}, "orig")
+        text, num = _parse_ocr_response(
+            {"corrected_text": "Korrigiert", "num_corrections": -5}, "orig"
+        )
         assert text == "Korrigiert"
         assert num == 0
 

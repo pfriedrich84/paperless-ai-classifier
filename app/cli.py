@@ -164,7 +164,9 @@ async def cmd_process_doc(document_id: int, *, force: bool = False) -> None:
 
         if force:
             with get_conn() as conn:
-                conn.execute("DELETE FROM processed_documents WHERE document_id = ?", (document_id,))
+                conn.execute(
+                    "DELETE FROM processed_documents WHERE document_id = ?", (document_id,)
+                )
 
         result = await _process_document(
             doc,

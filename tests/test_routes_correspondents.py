@@ -142,7 +142,9 @@ class TestCorrespondentRejectMovesToBlacklist:
 class TestCorrespondentApprove:
     def test_approve_handles_slash_in_name(self, client, db_path):
         """Names containing '/' should still be routed and approved correctly."""
-        app.state.paperless.create_correspondent = AsyncMock(return_value=type("E", (), {"id": 123})())
+        app.state.paperless.create_correspondent = AsyncMock(
+            return_value=type("E", (), {"id": 123})()
+        )
 
         conn = sqlite3.connect(str(db_path))
         conn.execute(

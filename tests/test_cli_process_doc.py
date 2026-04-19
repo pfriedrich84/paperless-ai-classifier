@@ -26,7 +26,9 @@ def test_cmd_process_doc_force_deletes_processed_row() -> None:
     """cmd_process_doc(..., force=True) should clear processed_documents entry first."""
     mock_paperless = MagicMock()
     mock_paperless.aclose = AsyncMock()
-    mock_paperless.get_document = AsyncMock(return_value=type("Doc", (), {"id": 224, "title": "Demo"})())
+    mock_paperless.get_document = AsyncMock(
+        return_value=type("Doc", (), {"id": 224, "title": "Demo"})()
+    )
     mock_paperless.list_correspondents = AsyncMock(return_value=[])
     mock_paperless.list_document_types = AsyncMock(return_value=[])
     mock_paperless.list_storage_paths = AsyncMock(return_value=[])
@@ -58,7 +60,9 @@ def test_cmd_process_doc_without_force_keeps_processed_row() -> None:
     """cmd_process_doc(..., force=False) should not delete from processed_documents."""
     mock_paperless = MagicMock()
     mock_paperless.aclose = AsyncMock()
-    mock_paperless.get_document = AsyncMock(return_value=type("Doc", (), {"id": 224, "title": "Demo"})())
+    mock_paperless.get_document = AsyncMock(
+        return_value=type("Doc", (), {"id": 224, "title": "Demo"})()
+    )
     mock_paperless.list_correspondents = AsyncMock(return_value=[])
     mock_paperless.list_document_types = AsyncMock(return_value=[])
     mock_paperless.list_storage_paths = AsyncMock(return_value=[])
