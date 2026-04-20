@@ -15,6 +15,7 @@ Alle Vorschläge landen in einer Review-Queue und werden erst nach manueller Fre
 - 🔍 Polling von Paperless-NGX nach Dokumenten mit Tag `Posteingang`
 - 🧠 Klassifikation via Ollama (Default: `gemma4:e4b`, konfigurierbar)
 - 📚 Kontextaware durch Embedding-Similarity-Search über bereits klassifizierte Dokumente (`sqlite-vec`) — Kontext-Dokumente liefern ihre vollständige Klassifikation (Korrespondent, Typ, Tags, Speicherpfad) als Referenz
+- 🛡️ LLM-as-Judge (optional): zweiter LLM-Pass prüft und korrigiert unsichere Klassifikationen, nur bei niedriger Erst-Confidence + vorhandenem Kontext — kein zusätzlicher GPU-Swap wenn dasselbe Modell wiederverwendet wird
 - ✅ Review-GUI mit HTMX: Annehmen / Ablehnen / Editieren in einem Klick
 - 🏷️ Tag-Whitelist: Neue Tags werden vorgeschlagen, aber erst nach Freigabe in Paperless angelegt
 - 📝 Multi-Level OCR-Korrektur: text-only, vision-light oder vision-full (konfigurierbar via `OCR_MODE`)
