@@ -71,6 +71,9 @@ Jede Stufe faengt Fehler ab und faellt auf die naechst niedrigere zurueck.
 | `MAX_DOC_CHARS` | `24000` | Max. Zeichen des Dokumenttexts im LLM-Prompt |
 | `CONTEXT_MAX_DOCS` | `5` | Wieviele aehnliche Dokumente als Few-Shot-Kontext |
 | `AUTO_COMMIT_CONFIDENCE` | `0` | 0 = immer manuell reviewen. Ab diesem Score (1–100) automatisch committen. |
+| `ENABLE_JUDGE_VERIFICATION` | `false` | Zweiter LLM-Pass, der jede Klassifikation prueft und ggf. korrigiert. Laeuft nur bei niedriger Confidence und vorhandenem Kontext. |
+| `JUDGE_CONFIDENCE_THRESHOLD` | `85` | Judge-Pass wird uebersprungen, wenn die Initial-Confidence bereits >= diesem Wert (0–100) ist. |
+| `OLLAMA_JUDGE_MODEL` | — | Optionales Modell fuer den Judge-Pass. Leer = `OLLAMA_MODEL` wiederverwenden (kein zusaetzlicher GPU-Swap). |
 
 ## Worker
 
