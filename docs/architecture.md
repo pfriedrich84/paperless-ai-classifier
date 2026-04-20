@@ -51,6 +51,8 @@ Paperless: Dokument hochgeladen → Tag "Posteingang" gesetzt
 │  3. Kontext-Suche  (aehnliche Dokumente via  │
 │     Embedding-Similarity, sqlite-vec)        │
 │  4. Klassifikation (Ollama LLM, JSON-Antwort)│
+│  4b. Judge-Pass (optional, LLM-as-Judge      │
+│      prueft Klassifikation, ggf. Korrektur)  │
 │  5. Vorschlag speichern (suggestions-Tabelle)│
 │  6. Telegram-Benachrichtigung (optional)     │
 │  7. Auto-Commit (bei hoher Confidence)       │
@@ -140,9 +142,20 @@ Vom LLM vorgeschlagene Tags werden gegen die existierenden Paperless-Tags abgegl
 - **Bekannte Tags:** Werden direkt mit ihrer ID gespeichert
 - **Unbekannte Tags:** Landen in `tag_whitelist` mit Status `pending`. Muessen unter `/tags` manuell freigegeben werden. Bei Freigabe wird der Tag retroaktiv auf bereits committete Dokumente angewendet und in offenen Vorschlaegen voraufgeloest
 
-### 6. Auto-Commit
+### 6. Judge-Pass (optional)
 
-Wenn `AUTO_COMMIT_CONFIDENCE > 0` und das LLM eine Confidence >= diesem Wert meldet, wird der Vorschlag ohne manuellen Review direkt committed. Bei Auto-Commit wird keine Telegram-Benachrichtigung gesendet.
+Wenn `ENABLE_JUDGE_VERIFICATION=true`, laeuft nach der Klassifikation ein zweiter LLM-Pass ("Judge"), der die Erst-Klassifikation prueft. Gate:
+
+- Initial-Confidence muss `< JUDGE_CONFIDENCE_THRESHOLD` sein (Default 85) — hohe Confidence wird durchgewunken.
+- Es muessen Kontext-Dokumente vorhanden sein — sonst hat der Judge keine bessere Grundlage als der Erst-Pass.
+
+Der Judge bekommt Zieldokument + Kontext + den Erst-Vorschlag und gibt einen `JudgeVerdict` zurueck: `agree`, `corrected`, `skipped` oder `error`. Bei `corrected` ersetzt das neue JSON die Erst-Klassifikation; der Original-Vorschlag wird als `original_proposed_json` in der Suggestion erhalten (Audit). Der Judge nutzt per Default dasselbe Modell (`OLLAMA_MODEL`) — kein zusaetzlicher GPU-Swap. Alternativ via `OLLAMA_JUDGE_MODEL`. Transport-/Parse-Fehler werden als `verdict="error"` geloggt; die Pipeline behaelt die Erst-Klassifikation.
+
+Timing wird separat unter `phase='judge'` in `phase_timing` erfasst.
+
+### 7. Auto-Commit
+
+Wenn `AUTO_COMMIT_CONFIDENCE > 0` und das LLM eine Confidence >= diesem Wert meldet, wird der Vorschlag ohne manuellen Review direkt committed. Bei Auto-Commit wird keine Telegram-Benachrichtigung gesendet. Bei aktivem Judge zaehlt die finale (ggf. korrigierte) Confidence.
 
 ## Reindex
 

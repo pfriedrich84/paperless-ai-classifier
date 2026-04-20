@@ -18,6 +18,9 @@ in Paperless-NGX.
          |
 6. Klassifikation               LLM bekommt Zieldokument + Kontext, liefert JSON
          |
+6b. Judge-Pass (optional)       Zweiter LLM-Pass prueft/korrigiert bei niedriger
+                                Confidence + vorhandenem Kontext
+         |
 7. Vorschlag speichern          Status: "pending" in der suggestions-Tabelle
          |
    ┌─────┴──────┐
@@ -79,6 +82,18 @@ Das LLM liefert strukturiertes JSON mit:
 
 Wenn `AUTO_COMMIT_CONFIDENCE > 0` und der LLM-Confidence-Score darueber liegt,
 wird der Vorschlag automatisch committet — ohne manuelles Review.
+
+#### Judge-Verifikation (optional)
+
+Mit `ENABLE_JUDGE_VERIFICATION=true` laeuft nach der Erst-Klassifikation ein
+zweiter LLM-Pass, der den Vorschlag prueft. Nur aktiv, wenn die Erst-Confidence
+unterhalb von `JUDGE_CONFIDENCE_THRESHOLD` (Default 85) liegt und Kontext-Docs
+vorhanden sind. Verdikte: `agree`, `corrected`, `skipped`, `error`. Bei
+`corrected` ersetzt der Judge die Erst-Klassifikation; der Erst-Vorschlag bleibt
+als Snapshot im Review-Detail und in der DB als `original_proposed_json`.
+Standardmaessig nutzt der Judge dasselbe Modell (`OLLAMA_MODEL`) — kein
+zusaetzlicher GPU-Swap. Stats-Seite zeigt eine eigene "Judge Verification"-
+Dauer-Kachel und ein Verdict-Breakdown-Panel.
 
 ### 5. Commit nach Paperless
 

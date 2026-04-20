@@ -319,7 +319,12 @@ jeder Modellwechsel kostet mehrere Sekunden (entladen + laden).
                | Fuer alle Docs:             |  (gemma4:e4b)
                |   Text: max MAX_DOC_CHARS   |  num_ctx: OLLAMA_NUM_CTX
                |   classify() mit Kontext    |  (Default: 16384 Tokens)
-               |   Suggestion speichern      |
+               |   (opt.) Judge-Pass:        |  gated: confidence <
+               |     classifier.verify()     |    JUDGE_CONFIDENCE_THRESHOLD
+               |     -> JudgeVerdict         |    + Kontext nicht leer
+               |     (agree/corrected/       |  Default: gleiches Modell,
+               |      skipped/error)         |    sonst OLLAMA_JUDGE_MODEL
+               |   Suggestion speichern      |    (Judge-Felder + Snapshot)
                |   Telegram / Auto-Commit    |
                |   Embedding in DB schreiben |  (kein Ollama-Call!)
                +--+---------+----------------+
@@ -335,9 +340,14 @@ jeder Modellwechsel kostet mehrere Sekunden (entladen + laden).
 
 **Phasen-Timing:** Jede Phase misst die Verarbeitungsdauer pro Dokument via
 `time.monotonic()` und schreibt sie in die `phase_timing`-Tabelle (Spalten:
-`poll_cycle_id`, `document_id`, `phase`, `duration_ms`, `success`). Die Messung
-ist in `_record_timing()` gekapselt und faengt Fehler ab, um die Pipeline nie
-zu blockieren. Die Stats-Seite zeigt Durchschnitte, Min/Max und 7-Tage-Trends.
+`poll_cycle_id`, `document_id`, `phase`, `duration_ms`, `success`). Moegliche
+Phasen: `ocr`, `embed`, `classify`, `judge`. Die `classify`-Zeile wird
+ausschliesslich durch den `classifier.classify()`-Call selbst erfasst — Fehler
+in Judge/Store/Notify/Commit erzeugen keinen doppelten `classify`-Eintrag.
+Die Messung ist in `_record_timing()` gekapselt und faengt Fehler ab, um die
+Pipeline nie zu blockieren. Die Stats-Seite zeigt Durchschnitte, Min/Max,
+7-Tage-Trends sowie ein separates Judge-Verdict-Panel (agree/corrected/
+skipped/error).
 
 **Modell-Switches pro Poll-Zyklus:**
 
@@ -379,8 +389,9 @@ Embedding trotzdem indexiert (falls vorhanden).
 10. **OCR-Cache:** Korrigierter Text landet in `doc_ocr_cache`, nie in Paperless. Sowohl `poll_inbox()` als auch `reindex_all()` nutzen gecachte Korrekturen. Beim Reindex wird OCR vor dem Embedding als Phase 0 ausgefuehrt — gecachte Eintraege werden uebersprungen.
 11. **Embedding-Text-Limit:** `document_summary()` begrenzt den **Gesamttext** (Titel + Content) auf `EMBED_MAX_CHARS` (Default 6000). Die Truncation greift auf die kombinierte Laenge, nicht nur auf den Content-Teil — damit kann ein langer Titel das Limit nicht sprengen.
 12. **Settings-Gruppierung:** Die Settings-Seite gruppiert Ollama-Settings nach Pipeline-Phase: "Ollama" (shared: URL, Timeout), "Phase 1: OCR", "Phase 2: Embedding", "Phase 3: Klassifikation". Jede Phase zeigt Modell, Context Window und Text-Limits.
-13. **Phasen-Timing:** Jede Phase misst die Verarbeitungsdauer pro Dokument (`time.monotonic()`) und speichert sie in `phase_timing`. `_record_timing()` faengt alle Fehler ab und blockiert nie die Pipeline. `poll_cycles` gruppiert Timing-Daten pro `poll_inbox()`-Aufruf (`cycle_id`).
+13. **Phasen-Timing:** Jede Phase misst die Verarbeitungsdauer pro Dokument (`time.monotonic()`) und speichert sie in `phase_timing`. `_record_timing()` faengt alle Fehler ab und blockiert nie die Pipeline. `poll_cycles` gruppiert Timing-Daten pro `poll_inbox()`-Aufruf (`cycle_id`). Die `classify`-Zeile wird nur durch `classifier.classify()` selbst erzeugt — spaetere Fehler (Judge/Store/Notify/Commit) fuehren nicht zu einem zweiten `classify`-Eintrag mit `success=0`.
 14. **Dashboard Pipeline-Status:** Die Dashboard-Seite zeigt ein live-aktualisiertes Pipeline-Status-Card via HTMX (`/pipeline-status`). Im Idle-Zustand: gruener Punkt, letzter Poll, naechster Poll, "Run Now"-Button. Im Running-Zustand: pulsierender blauer Punkt, Phase, Fortschrittsbalken, "Cancel"-Button. Polling-Intervall: 30s idle, 3s running.
+15. **LLM-as-Judge (optional):** Bei `ENABLE_JUDGE_VERIFICATION=true` laeuft nach `classify()` ein zweiter LLM-Pass (`classifier.verify()`). Gate: nur wenn Erst-Confidence `< JUDGE_CONFIDENCE_THRESHOLD` UND Kontext-Docs vorhanden. Verdikte: `agree` / `corrected` / `skipped` / `error`. Bei `corrected` ersetzt das neue Ergebnis die Erst-Klassifikation; der Erst-Vorschlag (raw JSON) wird als `suggestions.original_proposed_json` persistiert. Judge nutzt per Default dasselbe Modell wie die Klassifikation — kein zusaetzlicher GPU-Swap. Transport-/Parse-Fehler werden zu `verdict="error"` herabgestuft und halten die Pipeline nicht auf.
 
 ## Deployment (Dockhand)
 
