@@ -281,6 +281,12 @@ async def complete_setup(request: Request):
     if "enable_telegram" in config:
         config["enable_telegram"] = config["enable_telegram"].lower() in ("true", "1", "on")
 
+    # Ensure sane Ollama defaults are persisted into config.env on first setup,
+    # independent of docker-compose fallback values.
+    config.setdefault("ollama_timeout_seconds", 600)
+    config.setdefault("ollama_embed_model", "qwen3-embedding:4b")
+    config.setdefault("ollama_ocr_model", "qwen3:4b")
+
     # Save config
     from app.config_writer import save_config
 
