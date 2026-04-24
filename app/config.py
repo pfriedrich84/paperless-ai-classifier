@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     gui_date_format: str = "%d.%m.%Y"
     gui_username: str = ""
     gui_password: str = ""
+    cors_allowed_origins: str = ""  # comma-separated list, empty = disabled
 
     # --- Telegram ---
     enable_telegram: bool = False
@@ -102,6 +103,10 @@ class Settings(BaseSettings):
             return p
         # Installed package: fall back to working directory (Docker WORKDIR)
         return Path.cwd() / "prompts"
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
     @property
     def ollama_embed_dim_resolved(self) -> int:
@@ -451,6 +456,11 @@ FIELD_META: dict[str, dict[str, Any]] = {
         restart="app",
         help="Basic Auth password",
         sensitive=True,
+    ),
+    "cors_allowed_origins": _fm(
+        "GUI",
+        "CORS Allowed Origins",
+        help="Comma-separated allowlist of origins for cross-origin browser access. Empty = disabled.",
     ),
     # --- Telegram ---
     "enable_telegram": _fm(
