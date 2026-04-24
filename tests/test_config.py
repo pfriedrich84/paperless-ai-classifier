@@ -23,7 +23,9 @@ def test_prompts_dir_falls_back_to_workdir_prompts(tmp_path, monkeypatch):
     (workdir_prompts / "classify_system.txt").write_text("fallback", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
 
-    source_prompts = Path("/root/archibot/prompts")
+    import app.config as config_module
+
+    source_prompts = Path(config_module.__file__).parent.parent / "prompts"
     original_is_dir = Path.is_dir
 
     def fake_is_dir(self: Path) -> bool:
