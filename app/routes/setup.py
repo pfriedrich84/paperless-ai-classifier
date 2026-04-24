@@ -45,7 +45,12 @@ async def setup_page(request: Request):
     return request.app.state.templates.TemplateResponse(
         request,
         "setup.html",
-        {"step": 1, "values": _prefill_from_settings(), "needs_setup": needs_setup()},
+        {
+            "step": 1,
+            "values": _prefill_from_settings(),
+            "needs_setup": needs_setup(),
+            "partial": False,
+        },
     )
 
 
@@ -65,7 +70,12 @@ async def wizard_step(request: Request, step_num: int):
     return request.app.state.templates.TemplateResponse(
         request,
         "setup.html",
-        {"step": step_num, "values": values, "needs_setup": needs_setup()},
+        {
+            "step": step_num,
+            "values": values,
+            "needs_setup": needs_setup(),
+            "partial": True,
+        },
         headers={"HX-Push-Url": "false"},
     )
 

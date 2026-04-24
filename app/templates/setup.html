@@ -1,3 +1,4 @@
+{% if not partial %}
 <!DOCTYPE html>
 <html lang="de" class="h-full bg-gray-50">
 <head>
@@ -69,6 +70,7 @@
     </div>
 
     <!-- Wizard card -->
+{% endif %}
     <div id="wizard-step" class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
 
         {% if step == 1 %}
@@ -427,6 +429,7 @@
         {% endif %}
     </div>
 
+{% if not partial %}
     <!-- Footer -->
     <div class="text-center mt-6 text-sm text-gray-400">
         ArchiBot v0.1.0
@@ -435,3 +438,4 @@
 
 </body>
 </html>
+{% endif %}
