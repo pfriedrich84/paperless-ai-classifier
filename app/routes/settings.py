@@ -13,6 +13,7 @@ from app.config import FIELD_META, needs_setup, settings
 from app.db import get_conn
 from app.indexer import cancel_reindex, get_reindex_progress, start_reindex_task
 from app.pipeline.classifier import _load_system_prompt, _prompt_override_path
+from app.ui_safety import escape_html
 from app.worker import _has_embedding_index, cancel_poll, get_poll_progress, start_poll_task
 
 log = structlog.get_logger(__name__)
@@ -228,7 +229,7 @@ def _render_reindex_progress(progress) -> str:
         return (
             '<div id="reindex-result">'
             '<div class="text-red-600 text-sm font-medium mt-2">'
-            f"Reindex failed: {progress.error}</div></div>"
+            "Reindex failed. Check logs for details.</div></div>"
         )
 
     if progress.cancelled:
@@ -285,7 +286,7 @@ def _render_poll_progress(progress) -> str:
         return (
             '<div id="poll-result">'
             '<div class="text-red-600 text-sm font-medium mt-2">'
-            f"Poll failed: {progress.error}</div></div>"
+            "Poll failed. Check logs for details.</div></div>"
         )
 
     if progress.cancelled:
@@ -330,7 +331,7 @@ async def update_prompt(request: Request, prompt_text: str = Form(...)):
     except Exception as exc:
         log.error("prompt save failed", error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">Save failed: {exc}</div>',
+            '<div class="text-red-600 text-sm font-medium mt-2">Save failed. Check logs for details.</div>',
             status_code=500,
         )
 
@@ -352,7 +353,7 @@ async def reset_prompt(request: Request):
     except Exception as exc:
         log.error("prompt reset failed", error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">Reset failed: {exc}</div>',
+            '<div class="text-red-600 text-sm font-medium mt-2">Reset failed. Check logs for details.</div>',
             status_code=500,
         )
 
@@ -364,5 +365,5 @@ async def reset_prompt(request: Request):
         f' hx-swap-oob="true"'
         f' class="block w-full rounded-lg border-gray-300 shadow-sm'
         f" focus:border-primary-500 focus:ring-primary-500 text-sm font-mono"
-        f' px-3 py-2 border">{default_prompt}</textarea>'
+        f' px-3 py-2 border">{escape_html(default_prompt)}</textarea>'
     )

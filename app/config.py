@@ -76,6 +76,7 @@ class Settings(BaseSettings):
 
     # --- Webhook ---
     webhook_secret: str = ""  # if set, POST /webhook/paperless requires this token
+    webhook_log_raw_body: bool = False
 
     # --- MCP ---
     mcp_transport: str = "stdio"  # stdio | sse | streamable-http
@@ -483,6 +484,12 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "password",
         help="Shared secret for POST /webhook/paperless",
         sensitive=True,
+    ),
+    "webhook_log_raw_body": _fm(
+        "Webhook",
+        "Log Raw Webhook Body",
+        "bool",
+        help="Debug only. When enabled, logs a truncated/redacted webhook payload preview. Default is false.",
     ),
     # --- MCP ---
     "mcp_transport": _fm("MCP", "Transport", restart="app", help="stdio | sse | streamable-http"),

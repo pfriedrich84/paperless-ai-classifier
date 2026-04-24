@@ -56,7 +56,7 @@
             <div><dt class="text-xs uppercase text-blue-600">Title</dt>
                  <dd class="text-gray-900">{{ original_proposal.get('title') or '—' }}</dd></div>
             <div><dt class="text-xs uppercase text-blue-600">Date</dt>
-                 <dd class="text-gray-900">{{ original_proposal.get('date') | datefmt }}</dd></div>
+                 <dd class="text-gray-900">{{ original_proposal_date_formatted }}</dd></div>
             <div><dt class="text-xs uppercase text-blue-600">Correspondent</dt>
                  <dd class="text-gray-900">{{ original_proposal.get('correspondent') or '—' }}</dd></div>
             <div><dt class="text-xs uppercase text-blue-600">Document Type</dt>
@@ -88,7 +88,7 @@
             </div>
             <div>
                 <dt class="text-xs font-medium text-gray-400 uppercase">Date</dt>
-                <dd class="mt-0.5 text-sm text-gray-900">{{ s.original_date | datefmt }}</dd>
+                <dd class="mt-0.5 text-sm text-gray-900">{{ original_date_formatted }}</dd>
             </div>
             <div>
                 <dt class="text-xs font-medium text-gray-400 uppercase">Correspondent</dt>

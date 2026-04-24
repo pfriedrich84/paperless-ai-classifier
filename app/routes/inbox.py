@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from app.config import settings
+from app.datefmt import format_date
 from app.db import get_conn
 from app.worker import _process_document
 
@@ -108,6 +109,7 @@ def _build_item(
         "title": doc.title,
         "content_snippet": _content_snippet(doc.content),
         "created_date": doc.created_date,
+        "created_date_formatted": format_date(doc.created_date),
         "added": doc.added.isoformat()[:16] if doc.added else None,
         "status": status,
         "paperless_url": paperless_url,
@@ -362,7 +364,8 @@ async def process_inbox_bulk(request: Request):
     except Exception as exc:
         log.error("bulk process-inbox: failed to fetch inbox", error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">Failed to fetch inbox: {exc}</div>'
+            '<div class="text-red-600 text-sm font-medium mt-2">Failed to fetch inbox. Check logs for details.</div>',
+            status_code=500,
         )
 
     # Filter to unprocessed / error only
@@ -445,7 +448,8 @@ async def process_all_docs(request: Request):
         log.error("bulk process-all: failed to fetch documents", error=str(exc))
         return HTMLResponse(
             '<div class="text-red-600 text-sm font-medium mt-2">'
-            f"Failed to fetch documents: {exc}</div>"
+            "Failed to fetch documents. Check logs for details.</div>",
+            status_code=500,
         )
 
     if not docs:

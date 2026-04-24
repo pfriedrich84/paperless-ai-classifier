@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}ArchiBot{% endblock %}</title>
+    <meta name="csrf-token" content="{{ request.state.csrf_token or '' }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/static/htmx.min.js"></script>
     <link rel="icon" type="image/png" href="/static/logo.png">
@@ -173,6 +174,19 @@
         });
     }
 })();
+
+if (!window._csrfListenerRegistered) {
+    window._csrfListenerRegistered = true;
+    document.body.addEventListener("htmx:configRequest", function(evt) {
+        var verb = (evt.detail.verb || "get").toUpperCase();
+        if (["GET", "HEAD", "OPTIONS", "TRACE"].indexOf(verb) !== -1) return;
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        var token = meta && meta.getAttribute("content");
+        if (token) {
+            evt.detail.headers["X-CSRF-Token"] = token;
+        }
+    });
+}
 
 if (!window._toastListenerRegistered) {
     window._toastListenerRegistered = true;

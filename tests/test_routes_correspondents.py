@@ -9,6 +9,7 @@ import pytest
 
 from app.db import init_db
 from app.main import app, templates
+from tests.conftest import bootstrap_csrf_client
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +35,7 @@ def _setup_app(tmp_path, monkeypatch):
 def client():
     from starlette.testclient import TestClient
 
-    return TestClient(app, raise_server_exceptions=True)
+    return bootstrap_csrf_client(TestClient(app, raise_server_exceptions=True))
 
 
 @pytest.fixture()
@@ -168,6 +169,26 @@ class TestCorrespondentApprove:
         assert wl is not None
         assert wl["approved"] == 1
         assert wl["paperless_id"] == 123
+
+
+class TestCorrespondentApproveSecurity:
+    def test_approve_hides_exception_details(self, client, db_path):
+        app.state.paperless.create_correspondent = AsyncMock(
+            side_effect=Exception("<svg onload=alert(1)>")
+        )
+
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO correspondent_whitelist (name, times_seen) VALUES (?, ?)",
+            ("<b>Alice</b>", 1),
+        )
+        conn.commit()
+        conn.close()
+
+        r = client.post("/correspondents/%3Cb%3EAlice%3C%2Fb%3E/approve")
+        assert r.status_code == 500
+        assert "Correspondent approval failed." in r.text
+        assert "onload" not in r.text
 
 
 class TestCorrespondentUnblacklist:

@@ -11,6 +11,7 @@ from app.db import EMBED_DIM, init_db
 from app.main import app, templates
 from app.models import PaperlessDocument
 from app.routes.webhook import _extract_document_id
+from tests.conftest import bootstrap_csrf_client
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +91,7 @@ def _setup_app(tmp_path, monkeypatch):
 def client():
     from starlette.testclient import TestClient
 
-    return TestClient(app, raise_server_exceptions=False)
+    return bootstrap_csrf_client(TestClient(app, raise_server_exceptions=False))
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +136,15 @@ class TestWebhookNew:
         )
         assert r.status_code == 200
         mock_process.assert_awaited_once()
+
+    @patch("app.routes.webhook._process_document", new_callable=AsyncMock)
+    def test_processing_error_hides_exception_details(self, mock_process, client):
+        mock_process.side_effect = Exception("database password leaked")
+        r = client.post("/webhook/new", json={"document_id": 42})
+        assert r.status_code == 500
+        assert r.json()["error"] == "Processing failed"
+        assert r.json()["error_code"] == "webhook_new_failed"
+        assert "leaked" not in r.text
 
     @patch("app.routes.webhook.is_reindexing", return_value=True)
     def test_reindex_guard(self, _mock_reindex, client):
@@ -197,6 +207,15 @@ class TestWebhookEdit:
         assert r.status_code == 200
         assert r.json()["action"] == "reembedded"
 
+    @patch("app.routes.webhook.context_builder")
+    def test_processing_error_hides_exception_details(self, mock_cb, client):
+        mock_cb.document_summary.side_effect = Exception("secret stack trace")
+        r = client.post("/webhook/edit", json={"document_id": 42})
+        assert r.status_code == 500
+        assert r.json()["error"] == "Processing failed"
+        assert r.json()["error_code"] == "webhook_edit_failed"
+        assert "stack trace" not in r.text
+
     @patch("app.routes.webhook.is_reindexing", return_value=True)
     def test_reindex_guard(self, _mock_reindex, client):
         r = client.post("/webhook/edit", json={"document_id": 42})
@@ -221,6 +240,41 @@ class TestWebhookEdit:
 # ---------------------------------------------------------------------------
 # Multipart/form-data tests (Paperless "include document" option)
 # ---------------------------------------------------------------------------
+class TestWebhookLogging:
+    @patch("app.routes.webhook._process_document", new_callable=AsyncMock)
+    def test_default_logging_avoids_raw_payload_preview(self, mock_process, client, monkeypatch):
+        monkeypatch.setattr("app.config.settings.webhook_log_raw_body", False)
+
+        with patch("app.routes.webhook.log.info") as mock_info:
+            r = client.post(
+                "/webhook/new",
+                json={"document_id": 42, "token": "secret-value", "title": "hello"},
+            )
+
+        assert r.status_code == 200
+        logged = "\n".join(str(call) for call in mock_info.call_args_list)
+        assert "raw body preview" not in logged
+        assert "secret-value" not in logged
+        mock_process.assert_awaited_once()
+
+    @patch("app.routes.webhook._process_document", new_callable=AsyncMock)
+    def test_optional_raw_logging_redacts_sensitive_fields(self, mock_process, client, monkeypatch):
+        monkeypatch.setattr("app.config.settings.webhook_log_raw_body", True)
+
+        with patch("app.routes.webhook.log.info") as mock_info:
+            r = client.post(
+                "/webhook/new",
+                json={"document_id": 42, "token": "secret-value", "title": "hello"},
+            )
+
+        assert r.status_code == 200
+        logged = "\n".join(str(call) for call in mock_info.call_args_list)
+        assert "raw body preview" in logged
+        assert "[redacted]" in logged
+        assert "secret-value" not in logged
+        mock_process.assert_awaited_once()
+
+
 class TestWebhookMultipart:
     """Test webhook endpoints with multipart/form-data payloads.
 

@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from app.db import get_conn
 from app.pipeline.committer import retroactive_tag_apply
+from app.ui_safety import encode_path_segment, escape_html
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/tags")
@@ -29,7 +30,7 @@ async def tag_list(request: Request):
     )
 
 
-@router.post("/{name}/approve")
+@router.post("/{name:path}/approve")
 async def approve_tag(request: Request, name: str):
     paperless = request.app.state.paperless
     try:
@@ -60,9 +61,11 @@ async def approve_tag(request: Request, name: str):
         if parts:
             retro_note = f' <span class="text-xs text-gray-500">({", ".join(parts)})</span>'
 
+        encoded_name = encode_path_segment(name)
+        safe_name = escape_html(name)
         return HTMLResponse(
-            f'<tr id="tag-{name}" class="bg-green-50">'
-            f'<td class="px-4 py-3 font-medium">{name}</td>'
+            f'<tr id="tag-{encoded_name}" class="bg-green-50">'
+            f'<td class="px-4 py-3 font-medium">{safe_name}</td>'
             f'<td class="px-4 py-3">{entity.id}</td>'
             f'<td class="px-4 py-3"><span class="text-green-700">Approved</span>{retro_note}</td>'
             f'<td class="px-4 py-3">—</td></tr>'
@@ -70,12 +73,12 @@ async def approve_tag(request: Request, name: str):
     except Exception as exc:
         log.error("failed to approve tag", name=name, error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm">Error: {exc}</div>',
+            '<div class="text-red-600 text-sm">Tag approval failed.</div>',
             status_code=500,
         )
 
 
-@router.post("/{name}/reject")
+@router.post("/{name:path}/reject")
 async def reject_tag(request: Request, name: str):
     with get_conn() as conn:
         row = conn.execute(
@@ -98,7 +101,7 @@ async def reject_tag(request: Request, name: str):
     return HTMLResponse("")
 
 
-@router.post("/{name}/unblacklist")
+@router.post("/{name:path}/unblacklist")
 async def unblacklist_tag(request: Request, name: str):
     with get_conn() as conn:
         conn.execute("DELETE FROM tag_blacklist WHERE name = ?", (name,))

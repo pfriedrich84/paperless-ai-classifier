@@ -9,6 +9,7 @@ import structlog
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 
+from app.datefmt import format_date
 from app.db import get_conn
 from app.models import ReviewDecision, SuggestionRow
 from app.pipeline.committer import commit_suggestion
@@ -146,6 +147,10 @@ async def review_detail(request: Request, suggestion_id: int):
             "original_storage_path_name": original_storage_path_name,
             "original_tag_names": original_tag_names,
             "original_proposal": original_proposal,
+            "original_date_formatted": format_date(suggestion.original_date),
+            "original_proposal_date_formatted": format_date(
+                original_proposal.get("date") if original_proposal else None
+            ),
         },
     )
 

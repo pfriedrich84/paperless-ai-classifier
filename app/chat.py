@@ -216,7 +216,7 @@ async def ask(
         answer = await ollama.chat(messages)
     except Exception as exc:
         log.error("chat LLM call failed", error=str(exc))
-        answer = f"Fehler bei der Verarbeitung: {exc}"
+        answer = "Fehler bei der Verarbeitung. Bitte später erneut versuchen."
 
     # 5. Update session history (plain Q&A only)
     session.messages.append({"role": "user", "content": question})

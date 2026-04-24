@@ -8,6 +8,7 @@ import pytest
 
 from app.db import init_db
 from app.main import app, templates
+from tests.conftest import bootstrap_csrf_client
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +34,7 @@ def _setup_app(tmp_path, monkeypatch):
 def client():
     from starlette.testclient import TestClient
 
-    return TestClient(app, raise_server_exceptions=True)
+    return bootstrap_csrf_client(TestClient(app, raise_server_exceptions=True))
 
 
 class TestRouteSmoke:

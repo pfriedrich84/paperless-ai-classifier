@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Setup — ArchiBot</title>
+    <meta name="csrf-token" content="{{ request.state.csrf_token or '' }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/static/htmx.min.js"></script>
     <link rel="icon" type="image/png" href="/static/logo.png">
@@ -27,6 +28,20 @@
     </script>
 </head>
 <body class="h-full flex items-center justify-center p-4">
+<script>
+if (!window._setupCsrfListenerRegistered) {
+    window._setupCsrfListenerRegistered = true;
+    document.body.addEventListener("htmx:configRequest", function(evt) {
+        var verb = (evt.detail.verb || "get").toUpperCase();
+        if (["GET", "HEAD", "OPTIONS", "TRACE"].indexOf(verb) !== -1) return;
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        var token = meta && meta.getAttribute("content");
+        if (token) {
+            evt.detail.headers["X-CSRF-Token"] = token;
+        }
+    });
+}
+</script>
 
 <div class="w-full max-w-2xl">
     <!-- Header -->

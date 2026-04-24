@@ -9,6 +9,7 @@ import pytest
 
 from app.db import init_db
 from app.main import app, templates
+from tests.conftest import bootstrap_csrf_client
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +35,7 @@ def _setup_app(tmp_path, monkeypatch):
 def client():
     from starlette.testclient import TestClient
 
-    return TestClient(app, raise_server_exceptions=True)
+    return bootstrap_csrf_client(TestClient(app, raise_server_exceptions=True))
 
 
 @pytest.fixture()
@@ -98,6 +99,51 @@ class TestRejectMovesToBlacklist:
 
         assert log is not None
         assert "AuditTag" in log["details"]
+
+
+class TestTagApproveSecurity:
+    def test_approve_escapes_name_and_hides_exception_details(self, client, db_path):
+        app.state.paperless.create_tag = AsyncMock(
+            side_effect=Exception("<script>alert(1)</script>")
+        )
+
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO tag_whitelist (name, times_seen) VALUES (?, ?)", ("<b>Tag</b>", 1)
+        )
+        conn.commit()
+        conn.close()
+
+        r = client.post("/tags/%3Cb%3ETag%3C%2Fb%3E/approve")
+        assert r.status_code == 500
+        assert "Tag approval failed." in r.text
+        assert "<script>" not in r.text
+
+    def test_reject_handles_slash_in_name(self, client, db_path):
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "INSERT INTO tag_whitelist (name, times_seen) VALUES (?, ?)",
+            ("Finance / Tax", 3),
+        )
+        conn.commit()
+        conn.close()
+
+        r = client.post("/tags/Finance%20%2F%20Tax/reject")
+        assert r.status_code == 200
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        wl = conn.execute(
+            "SELECT * FROM tag_whitelist WHERE name = ?", ("Finance / Tax",)
+        ).fetchone()
+        bl = conn.execute(
+            "SELECT * FROM tag_blacklist WHERE name = ?", ("Finance / Tax",)
+        ).fetchone()
+        conn.close()
+
+        assert wl is None
+        assert bl is not None
 
 
 class TestUnblacklist:

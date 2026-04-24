@@ -9,6 +9,7 @@ import pytest
 
 from app.db import init_db
 from app.main import app, templates
+from tests.conftest import bootstrap_csrf_client
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +35,7 @@ def _setup_app(tmp_path, monkeypatch):
 def client():
     from starlette.testclient import TestClient
 
-    return TestClient(app, raise_server_exceptions=True)
+    return bootstrap_csrf_client(TestClient(app, raise_server_exceptions=True))
 
 
 @pytest.fixture()
@@ -98,6 +99,52 @@ class TestDoctypeRejectMovesToBlacklist:
 
         assert log is not None
         assert "AuditType" in log["details"]
+
+
+class TestDoctypeApproveSecurity:
+    def test_approve_hides_exception_details(self, client, db_path):
+        app.state.paperless.create_document_type = AsyncMock(
+            side_effect=Exception("<img src=x onerror=alert(1)>")
+        )
+
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO doctype_whitelist (name, times_seen) VALUES (?, ?)",
+            ("<b>Invoice</b>", 1),
+        )
+        conn.commit()
+        conn.close()
+
+        r = client.post("/doctypes/%3Cb%3EInvoice%3C%2Fb%3E/approve")
+        assert r.status_code == 500
+        assert "Document type approval failed." in r.text
+        assert "onerror" not in r.text
+
+    def test_reject_handles_slash_in_name(self, client, db_path):
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "INSERT INTO doctype_whitelist (name, times_seen) VALUES (?, ?)",
+            ("Forms / Tax", 2),
+        )
+        conn.commit()
+        conn.close()
+
+        r = client.post("/doctypes/Forms%20%2F%20Tax/reject")
+        assert r.status_code == 200
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        wl = conn.execute(
+            "SELECT * FROM doctype_whitelist WHERE name = ?", ("Forms / Tax",)
+        ).fetchone()
+        bl = conn.execute(
+            "SELECT * FROM doctype_blacklist WHERE name = ?", ("Forms / Tax",)
+        ).fetchone()
+        conn.close()
+
+        assert wl is None
+        assert bl is not None
 
 
 class TestDoctypeUnblacklist:

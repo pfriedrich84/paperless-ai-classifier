@@ -25,11 +25,27 @@ router = APIRouter(prefix="/webhook")
 
 # Max bytes of raw body to include in debug log (avoid flooding logs with PDF data)
 _LOG_BODY_MAX = 2000
+_REDACT_KEYS = {"token", "secret", "password", "authorization", "api_key", "apikey"}
 
 
 # ---------------------------------------------------------------------------
 # Payload helpers
 # ---------------------------------------------------------------------------
+def _redact_for_log(value):
+    """Redact common sensitive keys from structured payloads before logging."""
+    if isinstance(value, dict):
+        redacted = {}
+        for key, item in value.items():
+            if str(key).lower() in _REDACT_KEYS:
+                redacted[key] = "[redacted]"
+            else:
+                redacted[key] = _redact_for_log(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_for_log(item) for item in value]
+    return value
+
+
 async def _parse_webhook_body(request: Request, endpoint: str) -> dict:
     """Parse the webhook request body, handling both JSON and multipart/form-data.
 
@@ -37,7 +53,7 @@ async def _parse_webhook_body(request: Request, endpoint: str) -> dict:
     ("Dokument einbeziehen"), which sends the request as multipart/form-data
     instead of application/json.  The JSON payload is then in a form field.
 
-    Logs Content-Type and payload for debugging.
+    Logs metadata useful for debugging without exposing raw payload text by default.
     """
     content_type = request.headers.get("content-type", "")
     log.info(
@@ -78,22 +94,34 @@ async def _parse_webhook_body(request: Request, endpoint: str) -> dict:
                 # Store as plain key-value
                 body[key] = value
 
-        log.info(f"{endpoint} parsed multipart body", payload=body)
+        log.info(
+            f"{endpoint} parsed multipart body",
+            field_count=len(body),
+            keys=sorted(body.keys()),
+        )
+        if settings.webhook_log_raw_body:
+            log.info(f"{endpoint} multipart body preview", payload=_redact_for_log(body))
         # Clean up file handles
         await form.close()
     else:
-        # JSON or other content types — read raw body for logging
+        # JSON or other content types — log metadata only by default
         raw = await request.body()
-        raw_preview = raw[:_LOG_BODY_MAX].decode("utf-8", errors="replace")
-        if len(raw) > _LOG_BODY_MAX:
-            raw_preview += f"... ({len(raw)} bytes total)"
-        log.info(f"{endpoint} raw body", size=len(raw), preview=raw_preview)
+        log.info(f"{endpoint} raw body metadata", size=len(raw))
 
         try:
             body = json.loads(raw)
         except (json.JSONDecodeError, ValueError) as exc:
             log.warning(f"{endpoint} JSON parse failed", error=str(exc))
             body = {}
+
+        if settings.webhook_log_raw_body:
+            if body:
+                log.info(f"{endpoint} raw body preview", payload=_redact_for_log(body))
+            else:
+                raw_preview = raw[:_LOG_BODY_MAX].decode("utf-8", errors="replace")
+                if len(raw) > _LOG_BODY_MAX:
+                    raw_preview += f"... ({len(raw)} bytes total)"
+                log.info(f"{endpoint} raw body preview", preview=raw_preview)
 
     return body
 
@@ -197,7 +225,15 @@ async def webhook_new(
         return {"status": "ok", "document_id": doc_id}
     except Exception as exc:
         log.error("webhook/new processing failed", document_id=doc_id, error=str(exc))
-        return {"status": "error", "document_id": doc_id, "error": str(exc)}
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "document_id": doc_id,
+                "error": "Processing failed",
+                "error_code": "webhook_new_failed",
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -273,5 +309,10 @@ async def webhook_edit(
         log.error("webhook/edit failed", document_id=doc_id, error=str(exc))
         return JSONResponse(
             status_code=500,
-            content={"status": "error", "document_id": doc_id, "error": str(exc)},
+            content={
+                "status": "error",
+                "document_id": doc_id,
+                "error": "Processing failed",
+                "error_code": "webhook_edit_failed",
+            },
         )

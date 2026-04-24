@@ -9,6 +9,7 @@ import pytest
 from app.db import init_db
 from app.main import app, templates
 from app.models import PaperlessEntity
+from tests.conftest import bootstrap_csrf_client
 
 
 @pytest.fixture(autouse=True)
@@ -39,14 +40,15 @@ def _setup_app(tmp_path, monkeypatch):
 def client():
     from starlette.testclient import TestClient
 
-    return TestClient(app, raise_server_exceptions=True)
+    return bootstrap_csrf_client(TestClient(app, raise_server_exceptions=True))
 
 
 # ---------------------------------------------------------------------------
 # Setup wizard routes
 # ---------------------------------------------------------------------------
 class TestSetupWizard:
-    def test_setup_page_renders(self, client):
+    def test_setup_page_renders(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         r = client.get("/setup")
         assert r.status_code == 200
         assert "Setup Wizard" in r.text
@@ -54,6 +56,7 @@ class TestSetupWizard:
 
     def test_setup_prefills_from_env(self, client, monkeypatch):
         """When env vars are set, the wizard fields should be pre-filled."""
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         monkeypatch.setattr("app.config.settings.paperless_url", "http://my-paperless:8000")
         monkeypatch.setattr("app.config.settings.paperless_token", "my-secret-tok")
         monkeypatch.setattr("app.config.settings.ollama_url", "http://my-ollama:11434")
@@ -63,7 +66,8 @@ class TestSetupWizard:
         assert "http://my-paperless:8000" in r.text
         assert "my-secret-tok" in r.text
 
-    def test_step_navigation(self, client):
+    def test_step_navigation(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         # Step 1 → Step 2
         r = client.post(
             "/setup/step/2",
@@ -76,7 +80,8 @@ class TestSetupWizard:
         assert r.status_code == 200
         assert "Ollama" in r.text
 
-    def test_step_back_navigation(self, client):
+    def test_step_back_navigation(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         # Step 2 → Step 1
         r = client.post(
             "/setup/step/1",
@@ -85,7 +90,8 @@ class TestSetupWizard:
         assert r.status_code == 200
         assert "Paperless" in r.text
 
-    def test_step_to_summary(self, client):
+    def test_step_to_summary(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         # Step 3 → Step 4 (summary)
         r = client.post(
             "/setup/step/4",
@@ -101,22 +107,31 @@ class TestSetupWizard:
         assert "Review Configuration" in r.text
         assert "http://p:8000" in r.text
 
-    def test_telegram_step(self, client):
+    def test_telegram_step(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         r = client.post("/setup/step/3", data={})
         assert r.status_code == 200
         assert "Telegram" in r.text
+
+    def test_setup_page_redirects_when_already_configured(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: False)
+        r = client.get("/setup", follow_redirects=False)
+        assert r.status_code == 303
+        assert r.headers["location"] == "/"
 
 
 # ---------------------------------------------------------------------------
 # Connection tests
 # ---------------------------------------------------------------------------
 class TestConnectionTests:
-    def test_paperless_test_missing_fields(self, client):
+    def test_paperless_test_missing_fields(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         r = client.post("/setup/test-paperless", data={"paperless_url": "", "paperless_token": ""})
         assert r.status_code == 200
         assert "required" in r.text.lower()
 
-    def test_paperless_test_success(self, client):
+    def test_paperless_test_success(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         mock_client = AsyncMock()
         mock_client.ping = AsyncMock(return_value=True)
         mock_client.list_tags = AsyncMock(
@@ -139,7 +154,8 @@ class TestConnectionTests:
         assert "<select" in r.text
         assert 'name="paperless_inbox_tag_id"' in r.text
 
-    def test_paperless_test_failure(self, client):
+    def test_paperless_test_failure(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         mock_client = AsyncMock()
         mock_client.ping = AsyncMock(return_value=False)
         mock_client.aclose = AsyncMock()
@@ -152,13 +168,51 @@ class TestConnectionTests:
         assert r.status_code == 200
         assert "failed" in r.text.lower()
 
-    def test_ollama_test_missing_url(self, client):
+    def test_paperless_test_escapes_tag_names(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
+        mock_client = AsyncMock()
+        mock_client.ping = AsyncMock(return_value=True)
+        mock_client.list_tags = AsyncMock(
+            return_value=[PaperlessEntity(id=1, name="<script>alert(1)</script>")]
+        )
+        mock_client.aclose = AsyncMock()
+
+        with patch("app.clients.paperless.PaperlessClient", return_value=mock_client):
+            r = client.post(
+                "/setup/test-paperless",
+                data={"paperless_url": "http://p:8000", "paperless_token": "tok"},
+            )
+
+        assert r.status_code == 200
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text
+        assert "<script>alert(1)</script>" not in r.text
+
+    def test_paperless_test_hides_exception_details(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
+        mock_client = AsyncMock()
+        mock_client.ping = AsyncMock(side_effect=Exception("<b>secret</b>"))
+        mock_client.aclose = AsyncMock()
+
+        with patch("app.clients.paperless.PaperlessClient", return_value=mock_client):
+            r = client.post(
+                "/setup/test-paperless",
+                data={"paperless_url": "http://p:8000", "paperless_token": "tok"},
+            )
+
+        assert r.status_code == 500
+        assert "Connection test failed" in r.text
+        assert "secret" not in r.text
+
+    def test_ollama_test_missing_url(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         r = client.post("/setup/test-ollama", data={"ollama_url": "", "ollama_model": ""})
         assert r.status_code == 200
         assert "required" in r.text.lower()
 
-    def test_ollama_test_success(self, client):
+    def test_ollama_test_success(self, client, monkeypatch):
         from unittest.mock import MagicMock
+
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
 
         mock_client = AsyncMock()
         mock_client.ping = AsyncMock(return_value=True)
@@ -184,7 +238,33 @@ class TestConnectionTests:
         assert "Connected" in r.text
         assert "gemma4:26b-a4b-it-q4_K_M" in r.text
 
-    def test_telegram_test_missing_fields(self, client):
+    def test_ollama_test_escapes_model_names(self, client, monkeypatch):
+        from unittest.mock import MagicMock
+
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
+        mock_client = AsyncMock()
+        mock_client.ping = AsyncMock(return_value=True)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"models": [{"name": "<img src=x onerror=alert(1)>"}]}
+        mock_response.raise_for_status = MagicMock()
+        mock_http_client = AsyncMock()
+        mock_http_client.get = AsyncMock(return_value=mock_response)
+        mock_client._client = mock_http_client
+        mock_client.aclose = AsyncMock()
+
+        with patch("app.clients.ollama.OllamaClient", return_value=mock_client):
+            r = client.post(
+                "/setup/test-ollama",
+                data={"ollama_url": "http://o:11434", "ollama_model": ""},
+            )
+
+        assert r.status_code == 200
+        assert "&lt;img src=x onerror=alert(1)&gt;" in r.text
+        assert "<img src=x onerror=alert(1)>" not in r.text
+
+    def test_telegram_test_missing_fields(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         r = client.post(
             "/setup/test-telegram",
             data={"telegram_bot_token": "", "telegram_chat_id": ""},
@@ -197,7 +277,22 @@ class TestConnectionTests:
 # Complete setup
 # ---------------------------------------------------------------------------
 class TestCompleteSetup:
-    def test_complete_missing_paperless(self, client):
+    def test_complete_rejected_when_already_configured(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: False)
+        r = client.post(
+            "/setup/complete",
+            data={
+                "paperless_url": "http://p:8000",
+                "paperless_token": "tok",
+                "paperless_inbox_tag_id": "5",
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 403
+        assert "already complete" in r.text.lower()
+
+    def test_complete_missing_paperless(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         r = client.post(
             "/setup/complete",
             data={"ollama_url": "http://o:11434"},
@@ -205,7 +300,8 @@ class TestCompleteSetup:
         )
         assert r.status_code == 400
 
-    def test_complete_missing_inbox_tag(self, client):
+    def test_complete_missing_inbox_tag(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         r = client.post(
             "/setup/complete",
             data={
@@ -218,6 +314,7 @@ class TestCompleteSetup:
         assert r.status_code == 400
 
     def test_complete_success(self, client, monkeypatch):
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         # Mock client constructors and dependencies
         mock_paperless = AsyncMock()
         mock_ollama = AsyncMock()
@@ -301,6 +398,28 @@ class TestSettingsSave:
         assert r.status_code == 200
         assert "Restart" in r.text or "restart" in r.text
 
+    def test_update_prompt_hides_exception_details(self, client):
+        with patch(
+            "pathlib.Path.write_text",
+            side_effect=Exception("<b>disk exploded</b>"),
+        ):
+            r = client.post("/settings/update-prompt", data={"prompt_text": "hi"})
+
+        assert r.status_code == 500
+        assert "Save failed. Check logs for details." in r.text
+        assert "disk exploded" not in r.text
+
+    def test_reset_prompt_hides_exception_details(self, client):
+        with patch(
+            "pathlib.Path.unlink",
+            side_effect=Exception("<b>cannot unlink</b>"),
+        ):
+            r = client.post("/settings/reset-prompt")
+
+        assert r.status_code == 500
+        assert "Reset failed. Check logs for details." in r.text
+        assert "cannot unlink" not in r.text
+
 
 # ---------------------------------------------------------------------------
 # Setup redirect middleware
@@ -319,6 +438,7 @@ class TestSetupRedirect:
 
     def test_setup_not_redirected(self, client, monkeypatch):
         monkeypatch.setattr("app.main.needs_setup", lambda: True)
+        monkeypatch.setattr("app.routes.setup.needs_setup", lambda: True)
         r = client.get("/setup")
         assert r.status_code == 200
 

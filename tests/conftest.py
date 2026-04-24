@@ -22,6 +22,15 @@ from app.db import EMBED_DIM, SCHEMA
 from app.models import PaperlessDocument, PaperlessEntity
 
 
+def bootstrap_csrf_client(client, path: str = "/healthz"):
+    """Prime the CSRF cookie and default header for a TestClient."""
+    client.get(path)
+    token = client.cookies.get("csrf_token")
+    if token:
+        client.headers.update({"X-CSRF-Token": token})
+    return client
+
+
 @pytest.fixture()
 def tmp_db(tmp_path: Path) -> Path:
     """Create a temporary SQLite DB with the full schema applied (without sqlite-vec)."""

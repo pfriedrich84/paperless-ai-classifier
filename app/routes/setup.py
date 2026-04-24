@@ -6,12 +6,23 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.config import needs_setup, settings
+from app.ui_safety import escape_html
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/setup")
+
+
+def _setup_locked_response(request: Request):
+    """Reject setup access once onboarding is complete."""
+    if request.method == "GET":
+        return RedirectResponse(url="/", status_code=303)
+    return HTMLResponse(
+        '<div class="text-red-600 text-sm font-medium mt-2">Setup is already complete.</div>',
+        status_code=403,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +53,9 @@ def _prefill_from_settings() -> dict[str, str]:
 
 @router.get("")
 async def setup_page(request: Request):
+    if not needs_setup():
+        return _setup_locked_response(request)
+
     return request.app.state.templates.TemplateResponse(
         request,
         "setup.html",
@@ -65,6 +79,9 @@ def _collect_values(form: dict[str, Any]) -> dict[str, str]:
 
 @router.post("/step/{step_num}")
 async def wizard_step(request: Request, step_num: int):
+    if not needs_setup():
+        return _setup_locked_response(request)
+
     form = dict(await request.form())
     values = _collect_values(form)
     return request.app.state.templates.TemplateResponse(
@@ -89,6 +106,9 @@ async def test_paperless(
     paperless_url: str = Form(""),
     paperless_token: str = Form(""),
 ):
+    if not needs_setup():
+        return _setup_locked_response(request)
+
     if not paperless_url or not paperless_token:
         return HTMLResponse(
             '<div class="text-red-600 text-sm font-medium mt-2">URL and Token are required.</div>'
@@ -108,7 +128,7 @@ async def test_paperless(
         # Fetch tags for inbox tag selection
         tags = await client.list_tags()
         options = "".join(
-            f'<option value="{t.id}">{t.name} (ID: {t.id})</option>'
+            f'<option value="{t.id}">{escape_html(t.name)} (ID: {t.id})</option>'
             for t in sorted(tags, key=lambda t: t.name)
         )
 
@@ -131,7 +151,8 @@ async def test_paperless(
     except Exception as exc:
         log.warning("paperless test failed", error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">Error: {exc}</div>'
+            '<div class="text-red-600 text-sm font-medium mt-2">Connection test failed.</div>',
+            status_code=500,
         )
     finally:
         await client.aclose()
@@ -146,6 +167,9 @@ async def test_ollama(
     ollama_url: str = Form(""),
     ollama_model: str = Form(""),
 ):
+    if not needs_setup():
+        return _setup_locked_response(request)
+
     if not ollama_url:
         return HTMLResponse(
             '<div class="text-red-600 text-sm font-medium mt-2">URL is required.</div>'
@@ -169,8 +193,8 @@ async def test_ollama(
 
         if models:
             options = "".join(
-                f'<option value="{m}" {"selected" if m == ollama_model or m.startswith(ollama_model + ":") else ""}>'
-                f"{m}</option>"
+                f'<option value="{escape_html(m)}" {"selected" if m == ollama_model or m.startswith(ollama_model + ":") else ""}>'
+                f"{escape_html(m)}</option>"
                 for m in sorted(models)
             )
             model_html = (
@@ -199,7 +223,8 @@ async def test_ollama(
     except Exception as exc:
         log.warning("ollama test failed", error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">Error: {exc}</div>'
+            '<div class="text-red-600 text-sm font-medium mt-2">Connection test failed.</div>',
+            status_code=500,
         )
     finally:
         await client.aclose()
@@ -214,6 +239,9 @@ async def test_telegram(
     telegram_bot_token: str = Form(""),
     telegram_chat_id: str = Form(""),
 ):
+    if not needs_setup():
+        return _setup_locked_response(request)
+
     if not telegram_bot_token or not telegram_chat_id:
         return HTMLResponse(
             '<div class="text-red-600 text-sm font-medium mt-2">'
@@ -242,7 +270,8 @@ async def test_telegram(
     except Exception as exc:
         log.warning("telegram test failed", error=str(exc))
         return HTMLResponse(
-            f'<div class="text-red-600 text-sm font-medium mt-2">Error: {exc}</div>'
+            '<div class="text-red-600 text-sm font-medium mt-2">Connection test failed.</div>',
+            status_code=500,
         )
     finally:
         await client.aclose()
@@ -253,6 +282,9 @@ async def test_telegram(
 # ---------------------------------------------------------------------------
 @router.post("/complete")
 async def complete_setup(request: Request):
+    if not needs_setup():
+        return _setup_locked_response(request)
+
     form = dict(await request.form())
     values = _collect_values(form)
 

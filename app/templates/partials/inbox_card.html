@@ -84,7 +84,7 @@
 
             <!-- Date info -->
             <div class="mt-1.5 text-xs text-gray-400">
-                {% if item.created_date %}{{ item.created_date | datefmt }}{% endif %}
+                {% if item.created_date %}{{ item.created_date_formatted }}{% endif %}
                 {% if item.created_date and item.added %} &middot; {% endif %}
                 {% if item.added %}Added {{ item.added }}{% endif %}
             </div>

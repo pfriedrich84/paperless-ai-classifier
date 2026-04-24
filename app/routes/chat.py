@@ -7,6 +7,7 @@ from fastapi import APIRouter, Cookie, Form, Request
 from fastapi.responses import HTMLResponse
 
 from app.chat import ask, get_or_create_session
+from app.request_security import is_https_request
 
 log = structlog.get_logger(__name__)
 
@@ -22,7 +23,13 @@ async def chat_page(request: Request, chat_session: str | None = Cookie(default=
         "chat.html",
         {"messages": session.messages},
     )
-    response.set_cookie("chat_session", session_id, httponly=True, samesite="lax")
+    response.set_cookie(
+        "chat_session",
+        session_id,
+        httponly=True,
+        samesite="lax",
+        secure=is_https_request(request),
+    )
     return response
 
 
@@ -42,7 +49,13 @@ async def chat_send(
     tmpl = request.app.state.templates.get_template("partials/chat_messages.html")
     html = tmpl.render(messages=session.messages, sources=result.sources)
     response = HTMLResponse(html)
-    response.set_cookie("chat_session", session_id, httponly=True, samesite="lax")
+    response.set_cookie(
+        "chat_session",
+        session_id,
+        httponly=True,
+        samesite="lax",
+        secure=is_https_request(request),
+    )
     return response
 
 

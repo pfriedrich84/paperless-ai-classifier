@@ -22,6 +22,7 @@ from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.clients.telegram import TelegramClient
 from app.config import needs_setup, settings
+from app.csrf import CSRFMiddleware
 from app.datefmt import format_date
 from app.db import init_db
 from app.telegram_handler import start_telegram, stop_telegram
@@ -163,10 +164,6 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
         if path.startswith("/webhook"):
             return await call_next(request)
 
-        # Setup wizard is accessible without auth (guarded by its own flow)
-        if path.startswith("/setup"):
-            return await call_next(request)
-
         auth = request.headers.get("Authorization")
         if auth and auth.startswith("Basic "):
             import base64
@@ -245,6 +242,7 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(SetupRedirectMiddleware)
+app.add_middleware(CSRFMiddleware)
 if settings.gui_username and settings.gui_password:
     app.add_middleware(BasicAuthMiddleware)
 

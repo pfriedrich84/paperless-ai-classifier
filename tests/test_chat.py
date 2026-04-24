@@ -217,6 +217,7 @@ class TestAskPipeline:
             result = await ask("Frage", session, mock_paperless, mock_ollama)
 
         assert "Fehler" in result.answer
+        assert "connection refused" not in result.answer
 
     @pytest.mark.asyncio()
     async def test_entity_cache_reused_across_calls(self):
