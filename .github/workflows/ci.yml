@@ -120,7 +120,7 @@ jobs:
           sarif_file: ${{ steps.grype-sarif.outputs.sarif }}
 
       - name: Trivy container scan
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: test
           format: table
@@ -129,7 +129,7 @@ jobs:
           severity: HIGH,CRITICAL
 
       - name: Trivy SARIF report
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.28.0
         if: always()
         with:
           image-ref: test
