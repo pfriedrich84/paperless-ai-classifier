@@ -165,6 +165,13 @@ async def apply_runtime_changes(app: Any, changed: dict[str, Any]) -> list[str]:
         app.state.ollama = OllamaClient()
         actions.append("Ollama client recreated")
 
+    # Keep worker module refs in sync after client recreation.
+    if (changed_keys & paperless_fields) or (changed_keys & ollama_fields):
+        from app.worker import set_clients
+
+        set_clients(getattr(app.state, "paperless", None), getattr(app.state, "ollama", None))
+        actions.append("Worker clients updated")
+
     # --- Telegram client ---
     telegram_fields = {"enable_telegram", "telegram_bot_token", "telegram_chat_id"}
     if changed_keys & telegram_fields:

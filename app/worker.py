@@ -41,6 +41,13 @@ _paperless: PaperlessClient | None = None
 _ollama: OllamaClient | None = None
 
 
+def set_clients(paperless: PaperlessClient | None, ollama: OllamaClient | None) -> None:
+    """Update module-level client references used by poll jobs."""
+    global _paperless, _ollama
+    _paperless = paperless
+    _ollama = ollama
+
+
 # ---------------------------------------------------------------------------
 # Poll progress tracking
 # ---------------------------------------------------------------------------
@@ -1047,10 +1054,10 @@ async def _scheduled_poll() -> None:
 
 def start_scheduler(app: object) -> None:
     """Initialise and start the APScheduler."""
-    global _paperless, _ollama
-
-    _paperless = getattr(app, "state", app).paperless  # type: ignore[union-attr]
-    _ollama = getattr(app, "state", app).ollama  # type: ignore[union-attr]
+    set_clients(
+        getattr(app, "state", app).paperless,  # type: ignore[union-attr]
+        getattr(app, "state", app).ollama,  # type: ignore[union-attr]
+    )
 
     if settings.poll_interval_seconds <= 0:
         log.info("automatic polling disabled (poll_interval_seconds=0)")
