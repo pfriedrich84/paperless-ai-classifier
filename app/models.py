@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -77,6 +77,43 @@ class ClassificationResult(BaseModel):
     tags: list[ProposedTag] = Field(default_factory=list)
     confidence: int = 50
     reasoning: str = ""
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _coerce_tags(cls, value: Any) -> Any:
+        """Accept common loose tag outputs from LLMs.
+
+        Normal form is a list of objects ``[{"name": str, "confidence": int}]``.
+        We also tolerate:
+        - ``["tag-a", "tag-b"]``
+        - mixed lists of strings + objects
+        - single string ``"tag-a"``
+        - object with ``tag`` key instead of ``name``
+        """
+        if value is None:
+            return []
+
+        if isinstance(value, str):
+            name = value.strip()
+            return [{"name": name}] if name else []
+
+        if not isinstance(value, list):
+            return value
+
+        normalized: list[Any] = []
+        for item in value:
+            if isinstance(item, str):
+                name = item.strip()
+                if name:
+                    normalized.append({"name": name})
+                continue
+
+            if isinstance(item, dict) and "name" not in item and "tag" in item:
+                item = {**item, "name": item.get("tag")}
+
+            normalized.append(item)
+
+        return normalized
 
     @field_validator("confidence", mode="before")
     @classmethod

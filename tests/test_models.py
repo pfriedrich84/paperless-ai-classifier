@@ -61,6 +61,24 @@ class TestClassificationResult:
         result = ClassificationResult.model_validate(data)
         assert result.tags[0].confidence == 50
 
+    def test_tags_string_list_is_coerced(self):
+        data = {
+            "title": "Test",
+            "tags": ["Rechnung", "Zahlung"],
+        }
+        result = ClassificationResult.model_validate(data)
+        assert [t.name for t in result.tags] == ["Rechnung", "Zahlung"]
+        assert [t.confidence for t in result.tags] == [50, 50]
+
+    def test_tags_mixed_and_tag_key_is_coerced(self):
+        data = {
+            "title": "Test",
+            "tags": ["A", {"tag": "B", "confidence": 70}, {"name": "C", "confidence": 80}],
+        }
+        result = ClassificationResult.model_validate(data)
+        assert [t.name for t in result.tags] == ["A", "B", "C"]
+        assert [t.confidence for t in result.tags] == [50, 70, 80]
+
     def test_missing_title_raises(self):
         with pytest.raises(ValidationError):
             ClassificationResult.model_validate({"confidence": 80})
