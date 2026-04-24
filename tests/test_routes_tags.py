@@ -55,7 +55,7 @@ class TestRejectMovesToBlacklist:
         conn.commit()
         conn.close()
 
-        r = client.post("/tags/TestTag/reject")
+        r = client.post("/tags/reject?name=TestTag")
         assert r.status_code == 200
 
         conn = sqlite3.connect(str(db_path))
@@ -74,7 +74,7 @@ class TestRejectMovesToBlacklist:
         conn.commit()
         conn.close()
 
-        client.post("/tags/SeenTag/reject")
+        client.post("/tags/reject?name=SeenTag")
 
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
@@ -90,7 +90,7 @@ class TestRejectMovesToBlacklist:
         conn.commit()
         conn.close()
 
-        client.post("/tags/AuditTag/reject")
+        client.post("/tags/reject?name=AuditTag")
 
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
@@ -114,32 +114,36 @@ class TestTagApproveSecurity:
         conn.commit()
         conn.close()
 
-        r = client.post("/tags/%3Cb%3ETag%3C%2Fb%3E/approve")
+        r = client.post("/tags/approve?name=%3Cb%3ETag%3C%2Fb%3E")
         assert r.status_code == 500
         assert "Tag approval failed." in r.text
         assert "<script>" not in r.text
 
-    def test_reject_handles_slash_in_name(self, client, db_path):
+    @pytest.mark.parametrize(
+        ("tag_name", "encoded_name"),
+        [
+            ("Finance / Tax", "Finance%20%2F%20Tax"),
+            ("Tax?2026", "Tax%3F2026"),
+            ("Topic#Inbox", "Topic%23Inbox"),
+        ],
+    )
+    def test_reject_handles_reserved_characters_in_name(self, client, db_path, tag_name, encoded_name):
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         conn.execute(
             "INSERT INTO tag_whitelist (name, times_seen) VALUES (?, ?)",
-            ("Finance / Tax", 3),
+            (tag_name, 3),
         )
         conn.commit()
         conn.close()
 
-        r = client.post("/tags/Finance%20%2F%20Tax/reject")
+        r = client.post(f"/tags/reject?name={encoded_name}")
         assert r.status_code == 200
 
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
-        wl = conn.execute(
-            "SELECT * FROM tag_whitelist WHERE name = ?", ("Finance / Tax",)
-        ).fetchone()
-        bl = conn.execute(
-            "SELECT * FROM tag_blacklist WHERE name = ?", ("Finance / Tax",)
-        ).fetchone()
+        wl = conn.execute("SELECT * FROM tag_whitelist WHERE name = ?", (tag_name,)).fetchone()
+        bl = conn.execute("SELECT * FROM tag_blacklist WHERE name = ?", (tag_name,)).fetchone()
         conn.close()
 
         assert wl is None
@@ -154,7 +158,7 @@ class TestUnblacklist:
         conn.commit()
         conn.close()
 
-        r = client.post("/tags/BlockedTag/unblacklist")
+        r = client.post("/tags/unblacklist?name=BlockedTag")
         assert r.status_code == 200
 
         conn = sqlite3.connect(str(db_path))
@@ -175,7 +179,7 @@ class TestUnblacklist:
         conn.close()
 
         # Unblacklist
-        client.post("/tags/FreedTag/unblacklist")
+        client.post("/tags/unblacklist?name=FreedTag")
 
         # Now _upsert_tag_whitelist should work
         from app.worker import _upsert_tag_whitelist
@@ -196,7 +200,7 @@ class TestUnblacklist:
         conn.commit()
         conn.close()
 
-        client.post("/tags/UnblockTag/unblacklist")
+        client.post("/tags/unblacklist?name=UnblockTag")
 
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row

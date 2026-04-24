@@ -185,8 +185,9 @@ async def apply_runtime_changes(app: Any, changed: dict[str, Any]) -> list[str]:
         new_tg = TelegramClient()
         app.state.telegram = new_tg
         paperless = getattr(app.state, "paperless", None)
+        ollama = getattr(app.state, "ollama", None)
         if paperless:
-            start_telegram(new_tg, paperless)
+            start_telegram(new_tg, paperless, ollama)
         actions.append("Telegram client recreated")
 
     # --- Scheduler ---

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from pathlib import Path
+from types import SimpleNamespace
 
 
 # ---------------------------------------------------------------------------
@@ -146,3 +147,89 @@ class TestSaveConfig:
         # Non-numeric string for int field should be skipped
         changed, _ = save_config({"gui_port": "not_a_number"})
         assert "gui_port" not in changed
+
+
+class TestApplyRuntimeChanges:
+    async def test_restart_telegram_preserves_ollama_dependency(self, monkeypatch):
+        from app.config_writer import apply_runtime_changes
+
+        class OldTelegram:
+            def __init__(self):
+                self.closed = False
+
+            async def aclose(self):
+                self.closed = True
+
+        created: list[object] = []
+        start_calls: list[tuple[object, object, object]] = []
+        stop_calls: list[bool] = []
+
+        class NewTelegram:
+            def __init__(self):
+                created.append(self)
+
+        def fake_stop_telegram():
+            stop_calls.append(True)
+
+        def fake_start_telegram(telegram, paperless, ollama=None):
+            start_calls.append((telegram, paperless, ollama))
+
+        monkeypatch.setattr("app.clients.telegram.TelegramClient", NewTelegram)
+        monkeypatch.setattr("app.telegram_handler.stop_telegram", fake_stop_telegram)
+        monkeypatch.setattr("app.telegram_handler.start_telegram", fake_start_telegram)
+
+        old_telegram = OldTelegram()
+        paperless = object()
+        ollama = object()
+        app = SimpleNamespace(
+            state=SimpleNamespace(
+                telegram=old_telegram,
+                paperless=paperless,
+                ollama=ollama,
+            )
+        )
+
+        actions = await apply_runtime_changes(app, {"enable_telegram": True})
+
+        assert actions == ["Telegram client recreated"]
+        assert stop_calls == [True]
+        assert old_telegram.closed is True
+        assert app.state.telegram is created[0]
+        assert start_calls == [(created[0], paperless, ollama)]
+
+    async def test_restart_telegram_without_paperless_skips_start(self, monkeypatch):
+        from app.config_writer import apply_runtime_changes
+
+        class OldTelegram:
+            async def aclose(self):
+                return None
+
+        created: list[object] = []
+        start_calls: list[tuple[object, object, object | None]] = []
+
+        class NewTelegram:
+            def __init__(self):
+                created.append(self)
+
+        def fake_stop_telegram():
+            return None
+
+        def fake_start_telegram(telegram, paperless, ollama=None):
+            start_calls.append((telegram, paperless, ollama))
+
+        monkeypatch.setattr("app.clients.telegram.TelegramClient", NewTelegram)
+        monkeypatch.setattr("app.telegram_handler.stop_telegram", fake_stop_telegram)
+        monkeypatch.setattr("app.telegram_handler.start_telegram", fake_start_telegram)
+
+        app = SimpleNamespace(
+            state=SimpleNamespace(
+                telegram=OldTelegram(),
+                paperless=None,
+                ollama=object(),
+            )
+        )
+
+        await apply_runtime_changes(app, {"enable_telegram": True})
+
+        assert app.state.telegram is created[0]
+        assert start_calls == []

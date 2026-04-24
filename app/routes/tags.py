@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app.db import get_conn
@@ -30,8 +30,8 @@ async def tag_list(request: Request):
     )
 
 
-@router.post("/{name:path}/approve")
-async def approve_tag(request: Request, name: str):
+@router.post("/approve")
+async def approve_tag(request: Request, name: str = Query(...)):
     paperless = request.app.state.paperless
     try:
         entity = await paperless.create_tag(name)
@@ -78,8 +78,8 @@ async def approve_tag(request: Request, name: str):
         )
 
 
-@router.post("/{name:path}/reject")
-async def reject_tag(request: Request, name: str):
+@router.post("/reject")
+async def reject_tag(request: Request, name: str = Query(...)):
     with get_conn() as conn:
         row = conn.execute(
             "SELECT times_seen FROM tag_whitelist WHERE name = ?", (name,)
@@ -101,8 +101,8 @@ async def reject_tag(request: Request, name: str):
     return HTMLResponse("")
 
 
-@router.post("/{name:path}/unblacklist")
-async def unblacklist_tag(request: Request, name: str):
+@router.post("/unblacklist")
+async def unblacklist_tag(request: Request, name: str = Query(...)):
     with get_conn() as conn:
         conn.execute("DELETE FROM tag_blacklist WHERE name = ?", (name,))
         conn.execute(

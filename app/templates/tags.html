@@ -46,14 +46,14 @@
         </div>
         {% if not t.approved %}
         <div class="mt-3 flex gap-2">
-            <button hx-post="/tags/{{ t.name | urlencode }}/approve"
+            <button hx-post="/tags/approve?name={{ t.name | urlencode }}"
                     hx-target="#tag-m-{{ loop.index0 }}"
                     hx-swap="outerHTML"
                     class="flex-1 inline-flex justify-center items-center px-3 py-2 text-sm font-medium rounded-lg
                            bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
                 Approve
             </button>
-            <button hx-post="/tags/{{ t.name | urlencode }}/reject"
+            <button hx-post="/tags/reject?name={{ t.name | urlencode }}"
                     hx-target="#tag-m-{{ loop.index0 }}"
                     hx-swap="outerHTML"
                     hx-confirm="Tag '{{ t.name }}' auf Blacklist setzen? Er wird kuenftig vom Classifier ignoriert."
@@ -98,14 +98,14 @@
                 <td class="px-4 py-3 text-center text-sm text-gray-500">{{ t.times_seen }}</td>
                 <td class="px-4 py-3 text-right space-x-2">
                     {% if not t.approved %}
-                    <button hx-post="/tags/{{ t.name | urlencode }}/approve"
+                    <button hx-post="/tags/approve?name={{ t.name | urlencode }}"
                             hx-target="#tag-{{ loop.index0 }}"
                             hx-swap="outerHTML"
                             class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg
                                    bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
                         Approve
                     </button>
-                    <button hx-post="/tags/{{ t.name | urlencode }}/reject"
+                    <button hx-post="/tags/reject?name={{ t.name | urlencode }}"
                             hx-target="#tag-{{ loop.index0 }}"
                             hx-swap="outerHTML"
                             hx-confirm="Tag '{{ t.name }}' auf Blacklist setzen? Er wird kuenftig vom Classifier ignoriert."
@@ -154,7 +154,7 @@
             <span>Rejected: {{ b.rejected_at[:10] if b.rejected_at else '—' }}</span>
         </div>
         <div class="mt-3">
-            <button hx-post="/tags/{{ b.name | urlencode }}/unblacklist"
+            <button hx-post="/tags/unblacklist?name={{ b.name | urlencode }}"
                     hx-target="#bl-m-{{ loop.index0 }}"
                     hx-swap="outerHTML"
                     hx-confirm="Tag '{{ b.name }}' von der Blacklist entfernen? Er kann dann erneut vorgeschlagen werden."
@@ -185,7 +185,7 @@
                 <td class="px-4 py-3 text-center text-sm text-gray-500">{{ b.times_seen }}</td>
                 <td class="px-4 py-3 text-center text-sm text-gray-500">{{ b.rejected_at[:10] if b.rejected_at else '—' }}</td>
                 <td class="px-4 py-3 text-right">
-                    <button hx-post="/tags/{{ b.name | urlencode }}/unblacklist"
+                    <button hx-post="/tags/unblacklist?name={{ b.name | urlencode }}"
                             hx-target="#bl-{{ loop.index0 }}"
                             hx-swap="outerHTML"
                             hx-confirm="Tag '{{ b.name }}' von der Blacklist entfernen? Er kann dann erneut vorgeschlagen werden."
