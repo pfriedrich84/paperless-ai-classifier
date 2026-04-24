@@ -22,6 +22,7 @@ from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
 from app.clients.telegram import TelegramClient
 from app.config import needs_setup, settings
+from app.datefmt import format_date
 from app.db import init_db
 from app.telegram_handler import start_telegram, stop_telegram
 from app.worker import start_scheduler, stop_scheduler
@@ -36,6 +37,7 @@ _TEMPLATES_DIR = _BASE_DIR / "templates"
 _STATIC_DIR = _BASE_DIR / "static"
 
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+templates.env.filters["datefmt"] = format_date
 
 # ---------------------------------------------------------------------------
 # Logging setup

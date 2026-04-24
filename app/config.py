@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     # --- GUI ---
     gui_port: int = 8088
     gui_base_url: str = ""  # e.g. "https://classifier.local:8088" for Telegram links
+    gui_date_format: str = "%d.%m.%Y"
     gui_username: str = ""
     gui_password: str = ""
 
@@ -433,6 +434,11 @@ FIELD_META: dict[str, dict[str, Any]] = {
         "External Base URL",
         "url",
         help="External URL for Telegram links (e.g. https://classifier.local:8088)",
+    ),
+    "gui_date_format": _fm(
+        "GUI",
+        "Date Format",
+        help="Python strftime format for displayed dates in the GUI (default: %d.%m.%Y)",
     ),
     "gui_username": _fm(
         "GUI", "Basic Auth Username", restart="app", help="Leave empty to disable Basic Auth"

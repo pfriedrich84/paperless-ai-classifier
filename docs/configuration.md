@@ -93,6 +93,7 @@ Jede Stufe faengt Fehler ab und faellt auf die naechst niedrigere zurueck.
 |---|---|---|
 | `GUI_PORT` | `8088` | Port der Review-GUI |
 | `GUI_BASE_URL` | — | Externe URL fuer Telegram-Links (z.B. `https://classifier.local:8088`) |
+| `GUI_DATE_FORMAT` | `%d.%m.%Y` | Anzeigeformat fuer Datumswerte in der GUI (Python-`strftime`-Syntax) |
 | `GUI_USERNAME` | — | Basic-Auth Benutzername (leer = deaktiviert) |
 | `GUI_PASSWORD` | — | Basic-Auth Passwort |
 
