@@ -26,8 +26,10 @@ class TelegramClient:
         self._base = f"https://api.telegram.org/bot{self.token}"
         self._client = httpx.AsyncClient(timeout=30.0)
         self._offset: int = 0  # for long-polling getUpdates
+        self._closed: bool = False
 
     async def aclose(self) -> None:
+        self._closed = True
         await self._client.aclose()
 
     @property
@@ -44,7 +46,7 @@ class TelegramClient:
         parse_mode: str = "HTML",
     ) -> dict[str, Any] | None:
         """Send a message to the configured chat."""
-        if not self.enabled:
+        if not self.enabled or self._closed:
             return None
         payload: dict[str, Any] = {
             "chat_id": self.chat_id,
@@ -67,6 +69,8 @@ class TelegramClient:
         text: str = "",
     ) -> None:
         """Acknowledge an inline-keyboard button press."""
+        if self._closed:
+            return
         try:
             await self._client.post(
                 f"{self._base}/answerCallbackQuery",
@@ -83,6 +87,8 @@ class TelegramClient:
         parse_mode: str = "HTML",
     ) -> None:
         """Edit an existing message (e.g. remove inline keyboard after action)."""
+        if self._closed:
+            return
         try:
             await self._client.post(
                 f"{self._base}/editMessageText",
@@ -101,7 +107,7 @@ class TelegramClient:
     # ------------------------------------------------------------------
     async def get_updates(self, timeout: int = 1) -> list[dict[str, Any]]:
         """Fetch new updates via long-polling."""
-        if not self.enabled:
+        if not self.enabled or self._closed:
             return []
         try:
             r = await self._client.get(
@@ -120,5 +126,9 @@ class TelegramClient:
                 self._offset = updates[-1]["update_id"] + 1
             return updates
         except Exception as exc:
-            log.warning("telegram getUpdates failed", error=str(exc))
+            msg = str(exc)
+            if "client has been closed" in msg.lower():
+                # Harmless race during hot-reload/shutdown.
+                return []
+            log.warning("telegram getUpdates failed", error=msg)
             return []
