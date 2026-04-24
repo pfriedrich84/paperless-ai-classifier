@@ -178,7 +178,7 @@ async def test_ollama(
             model_html = (
                 '<div class="mt-2 text-amber-600 text-sm">'
                 "No models found. Pull a model first: "
-                "<code>ollama pull gemma4:26b-a4b-it-q4_K_M</code></div>"
+                "<code>ollama pull gemma4:e4b</code></div>"
             )
 
         return HTMLResponse(
