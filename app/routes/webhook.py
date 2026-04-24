@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
+from inspect import isawaitable
 
 import structlog
 from fastapi import APIRouter, Header, Request
@@ -262,7 +263,9 @@ async def webhook_edit(
             return {"status": "ok", "document_id": doc_id, "action": "skipped_empty"}
 
         vec = await ollama.embed(summary)
-        context_builder.store_embedding(doc, vec)
+        store_result = context_builder.store_embedding(doc, vec)
+        if isawaitable(store_result):
+            await store_result
 
         log.info("document re-embedded", document_id=doc_id)
         return {"status": "ok", "document_id": doc_id, "action": "reembedded"}
