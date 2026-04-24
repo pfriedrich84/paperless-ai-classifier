@@ -17,6 +17,7 @@ from fastapi.security import HTTPBasic
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.cors import CORSMiddleware
 
 from app.clients.ollama import OllamaClient
 from app.clients.paperless import PaperlessClient
@@ -243,6 +244,14 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(SetupRedirectMiddleware)
 app.add_middleware(CSRFMiddleware)
+if settings.cors_allowed_origins_list:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins_list,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 if settings.gui_username and settings.gui_password:
     app.add_middleware(BasicAuthMiddleware)
 
