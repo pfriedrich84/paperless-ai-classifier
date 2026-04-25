@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # =============================================================================
@@ -24,8 +24,7 @@ class PaperlessDocument(BaseModel):
     storage_path: int | None = None
     tags: list[int] = Field(default_factory=list)
 
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 class PaperlessEntity(BaseModel):
@@ -37,8 +36,7 @@ class PaperlessEntity(BaseModel):
     match: str | None = None
     matching_algorithm: int | None = None
 
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")
 
 
 # =============================================================================

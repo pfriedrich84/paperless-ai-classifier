@@ -21,9 +21,9 @@ RUN apt-get update \
 COPY pyproject.toml constraints.txt ./
 RUN pip install --upgrade pip setuptools wheel \
     && pip install -c constraints.txt \
-        "fastapi>=0.115.0,<=0.135.2" \
-        "starlette<1.0.0" \
-        "uvicorn[standard]>=0.32.0,<=0.42.0" \
+        "fastapi>=0.121.0,<=0.135.2" \
+        "starlette>=0.49.1,<0.50.0" \
+        "uvicorn[standard]>=0.31.1,<=0.42.0" \
         "httpx>=0.27.0" \
         "pydantic>=2.9.0,<=2.12.5" \
         "pydantic-settings>=2.5.0" \

@@ -25,13 +25,29 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -c constraints.txt -e ".[dev]"
+        run: python -m pip install -c constraints.txt -e ".[dev]"
+
+      - name: Environment diagnostics
+        run: |
+          python --version
+          python -m pip --version
+          python -m pip freeze | sort
+          python -m pip check
+          which archibot || true
+          python - <<'PY'
+          import importlib.metadata as m
+          for pkg in ["archibot", "fastapi", "starlette", "uvicorn", "mcp", "sse-starlette", "pytest", "ruff"]:
+              try:
+                  print(f"{pkg}=={m.version(pkg)}")
+              except Exception as exc:
+                  print(f"{pkg}: missing ({exc})")
+          PY
 
       - name: Ruff lint
-        run: ruff check app/ tests/
+        run: python -m ruff check app/ tests/
 
       - name: Ruff format check
-        run: ruff format --check app/ tests/
+        run: python -m ruff format --check app/ tests/
 
       - name: Hadolint Dockerfile lint
         uses: hadolint/hadolint-action@v3.1.0
@@ -39,21 +55,26 @@ jobs:
           dockerfile: Dockerfile
 
       - name: Run tests
-        run: pytest tests/ -v
+        run: python -m pytest tests/ -v
 
       - name: Dependency compatibility check
-        run: pip check
+        run: python -m pip check
 
-      - name: Security audit
+      - name: Install pip-audit
         run: |
-          pip install -c constraints.txt pip-audit
+          python -m pip install --progress-bar off -c constraints.txt pip-audit
+          python -m pip show pip-audit
+
+      - name: Run security audit
+        run: |
           ARGS=""
           while IFS= read -r line; do
             line="${line%%#*}"
             line="$(echo "$line" | xargs)"
             [ -n "$line" ] && ARGS="$ARGS --ignore-vuln $line"
           done < .pip-audit-known-vulnerabilities
-          eval pip-audit $ARGS
+          echo "Running: python -m pip_audit --skip-editable $ARGS"
+          eval python -m pip_audit --skip-editable $ARGS
 
       - name: Dependency age check (supply-chain protection)
         run: python scripts/check_dependency_age.py --min-days 3
@@ -70,7 +91,9 @@ jobs:
           "
 
       - name: Console script check
-        run: archibot --help
+        run: |
+          archibot --help
+          python -m app.cli --help
 
       - name: Import check
         run: python -c "import app.main"
@@ -80,6 +103,25 @@ jobs:
 
       - name: Prompt file check
         run: python -c "from app.pipeline.classifier import _load_system_prompt; assert len(_load_system_prompt()) > 100"
+
+      - name: Failure diagnostics
+        if: failure()
+        run: |
+          echo "=== pip check ==="
+          python -m pip check || true
+          echo "=== pip freeze ==="
+          python -m pip freeze | sort || true
+          echo "=== archibot path ==="
+          which archibot || true
+          echo "=== import metadata ==="
+          python - <<'PY'
+          import importlib.metadata as m
+          for pkg in ["archibot", "fastapi", "starlette", "uvicorn", "mcp", "sse-starlette", "pytest", "ruff"]:
+              try:
+                  print(f"{pkg}=={m.version(pkg)}")
+              except Exception as exc:
+                  print(f"{pkg}: missing ({exc})")
+          PY
 
   docker-build:
     runs-on: ubuntu-latest
